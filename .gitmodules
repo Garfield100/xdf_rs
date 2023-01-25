@@ -1,0 +1,3 @@
+[submodule "example-files"]
+	path = example-files
+	url = git@github.com:xdf-modules/example-files.git
