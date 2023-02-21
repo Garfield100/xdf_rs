@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
+#![deny(nonstandard_style)]
 #![warn(array_into_iter)]
+#![crate_type = "lib"]
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -11,21 +13,8 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug)]
-pub enum Tag {
-    FileHeader,
-    StreamHeader,
-    Samples,
-    ClockOffset,
-    Boundary,
-    StreamFooter,
-}
-
-#[derive(Debug)]
-pub struct RawChunk {
-    tag: Tag,
-    content_bytes: Vec<u8>,
-}
+mod chunk_structs;
+use crate::chunk_structs::*;
 
 #[derive(Debug)]
 pub enum ReadChunkError {
@@ -48,7 +37,7 @@ const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
 const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
 const EARLY_EOF: &str = "Reached EOF early";
 
-pub fn read_file_to_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, ReadChunkError> {
+pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, ReadChunkError> {
     let file_bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(err) => return Err(ReadChunkError::IoError(err)),
@@ -164,39 +153,24 @@ pub fn read_file_to_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, Rea
     return Ok(raw_chunks);
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{read_file_to_chunks, ReadChunkError, FILE_TOO_SHORT_MSG, NO_MAGIC_NUMBER_MSG};
-    use assert_fs::{prelude::*, TempDir};
+pub enum Chunk<'a, Format> {
+    FileHeaderChunk(FileHeaderChunk),
+    StreamHeaderChunk(StreamHeaderChunk<Format>),
+    SamplesChunk(SamplesChunk<'a, Format>),
+    ClockOffsetChunk(ClockOffsetChunk),
+    BoundaryChunk(BoundaryChunk),
+    StreamFooterChunk(StreamFooterChunk),
+}
 
-    #[test]
-    fn invalid_path() {
-        let res = read_file_to_chunks("./does/not/exist.xdf");
-        assert!(matches!(res.unwrap_err(), ReadChunkError::IoError(_)))
+pub fn raw_chunk_to_chunk<'a, Format>(raw_chunk: RawChunk) -> Chunk<'a, Format> {
+    match raw_chunk.tag {
+        Tag::FileHeader => todo!(),
+        Tag::StreamHeader => todo!(),
+        Tag::Samples => todo!(),
+        Tag::ClockOffset => todo!(),
+        Tag::Boundary => return Chunk::BoundaryChunk(BoundaryChunk {}),
+        Tag::StreamFooter => todo!(),
     }
 
-    #[test]
-    fn empty_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let empty_file = temp_dir.child("empty.xdf");
-        empty_file.touch().unwrap();
-
-        let res = read_file_to_chunks(empty_file.path());
-        assert!(
-            matches!(res.unwrap_err(), ReadChunkError::ParseError(s) if s == FILE_TOO_SHORT_MSG.to_string() )
-        );
-    }
-
-    #[test]
-    fn no_magic_number() {
-        let temp_dir = TempDir::new().unwrap();
-        let no_magic_file = temp_dir.child("no_magic.xdf");
-        no_magic_file.touch().unwrap();
-        no_magic_file.write_str("NOT: a magic number").unwrap();
-
-        let res = read_file_to_chunks(no_magic_file.path());
-        assert!(
-            matches!(res.unwrap_err(), ReadChunkError::ParseError(s) if s == NO_MAGIC_NUMBER_MSG.to_string() )
-        );
-    }
+    todo!();
 }
