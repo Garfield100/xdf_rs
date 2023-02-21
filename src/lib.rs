@@ -4,13 +4,15 @@
 #![crate_type = "lib"]
 
 use byteorder::{ByteOrder, LittleEndian};
+use xmltree::Element;
 
 use std::{
     error::Error,
     fmt::Display,
     fs,
-    io::{self},
+    io::{self, Read},
     path::Path,
+    str::Utf8Error,
 };
 
 mod chunk_structs;
@@ -33,9 +35,9 @@ impl Display for ReadChunkError {
 
 impl Error for ReadChunkError {}
 
-const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
-const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
-const EARLY_EOF: &str = "Reached EOF early";
+pub const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
+pub const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
+pub const EARLY_EOF: &str = "Reached EOF early";
 
 pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, ReadChunkError> {
     let file_bytes = match fs::read(path) {
@@ -145,14 +147,14 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
             tag: chunk_tag,
             content_bytes: chunk_bytes,
         };
-        println!("{:#?}", &raw_chunk);
-        println!("{}", chunk_length);
+
         raw_chunks.push(raw_chunk);
     }
 
     return Ok(raw_chunks);
 }
 
+#[derive(Debug)]
 pub enum Chunk<'a, Format> {
     FileHeaderChunk(FileHeaderChunk),
     StreamHeaderChunk(StreamHeaderChunk<Format>),
@@ -162,15 +164,65 @@ pub enum Chunk<'a, Format> {
     StreamFooterChunk(StreamFooterChunk),
 }
 
-pub fn raw_chunk_to_chunk<'a, Format>(raw_chunk: RawChunk) -> Chunk<'a, Format> {
+#[derive(Debug)]
+pub enum ParseChunkError {
+    XMLParseError(xmltree::ParseError),
+    HeaderMissingVersionError,
+    InvalidVersionError(String),
+}
+
+pub fn raw_chunk_to_chunk<'a, Format>(
+    raw_chunk: RawChunk,
+) -> Result<Chunk<'a, Format>, ParseChunkError> {
     match raw_chunk.tag {
-        Tag::FileHeader => todo!(),
+        Tag::FileHeader => {
+            let root = {
+                match Element::parse(raw_chunk.content_bytes.as_slice()) {
+                    Ok(root) => root,
+                    Err(err) => return Err(ParseChunkError::XMLParseError(err)),
+                }
+            };
+
+            let version_element = match root.get_child("version") {
+                Some(child) => child,
+                None => return Err(ParseChunkError::HeaderMissingVersionError),
+            };
+
+            let version_str = {
+                match version_element.get_text() {
+                    Some(val) => val,
+                    None => return Err(ParseChunkError::HeaderMissingVersionError),
+                }
+            };
+
+            let version = {
+                match version_str.parse::<f32>() {
+                    Ok(t) => t,
+                    Err(e) => {
+                        return Err(ParseChunkError::InvalidVersionError(format!(
+                            "Error while parsing version string into a double: {}",
+                            e
+                        )))
+                    }
+                }
+            };
+
+            if version != 1.0 {
+                return Err(ParseChunkError::InvalidVersionError(format!(
+                    "XDF version {} not supported. Only version 1.0 is supported.",
+                    version
+                )))
+            }
+
+            return Ok(Chunk::FileHeaderChunk(FileHeaderChunk {
+                version,
+                xml: root,
+            }));
+        }
         Tag::StreamHeader => todo!(),
         Tag::Samples => todo!(),
         Tag::ClockOffset => todo!(),
-        Tag::Boundary => return Chunk::BoundaryChunk(BoundaryChunk {}),
+        Tag::Boundary => return Ok(Chunk::BoundaryChunk(BoundaryChunk {})),
         Tag::StreamFooter => todo!(),
     }
-
-    todo!();
 }

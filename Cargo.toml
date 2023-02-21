@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 byteorder = "1.4.3"
+xmltree = "0.10.3"
 
 [dev-dependencies]
 assert_fs = "1.0.10"
