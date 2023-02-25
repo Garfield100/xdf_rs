@@ -71,7 +71,13 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
                         return Err(ReadChunkError::ParseError(EARLY_EOF.to_string()));
                     }
                 }
-                chunk_length = LittleEndian::read_u32(&bytes) as u64;
+
+                
+                chunk_length = match num_length_bytes.1 {
+                    4 => LittleEndian::read_u32(&bytes) as u64,
+                    8 => LittleEndian::read_u64(&bytes),
+                    _ => unreachable!()
+                }
             }
 
             _ => {
