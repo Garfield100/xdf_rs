@@ -4,6 +4,7 @@
 #![crate_type = "lib"]
 
 use byteorder::{ByteOrder, LittleEndian};
+use thiserror::Error;
 use xmltree::Element;
 
 use std::{
@@ -170,11 +171,14 @@ pub enum Chunk<'a, Format> {
     StreamFooterChunk(StreamFooterChunk),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseChunkError {
+    #[error("Error while parsing the chunk's xml")]
     XMLParseError(xmltree::ParseError),
-    HeaderMissingVersionError,
-    InvalidVersionError(String),
+    #[error("The XML tag {0} either does not exist or contains invalid or no data")]
+    MissingElementError(String),
+    #[error("Version {0} is not supported")]
+    VersionNotSupportedError(f32),
 }
 
 pub fn raw_chunk_to_chunk<'a, Format>(
