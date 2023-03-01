@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.69"
 byteorder = "1.4.3"
+thiserror = "1.0.38"
 xmltree = "0.10.3"
 
 [dev-dependencies]

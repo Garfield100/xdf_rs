@@ -8,6 +8,7 @@ use thiserror::Error;
 use xmltree::Element;
 
 use std::{
+    borrow::Cow,
     error::Error,
     fmt::Display,
     fs,
@@ -19,22 +20,14 @@ use std::{
 mod chunk_structs;
 use crate::chunk_structs::*;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ReadChunkError {
-    IoError(io::Error),
+    #[error("Could not parse file: {0}")]
     ParseError(String),
-}
 
-impl Display for ReadChunkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReadChunkError::IoError(err) => err.fmt(f),
-            ReadChunkError::ParseError(msg) => write!(f, "ParseError: {}", msg),
-        }
-    }
+    #[error(transparent)]
+    IOError(#[from] io::Error),
 }
-
-impl Error for ReadChunkError {}
 
 pub const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
 pub const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
@@ -43,7 +36,7 @@ pub const EARLY_EOF: &str = "Reached EOF early";
 pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, ReadChunkError> {
     let file_bytes = match fs::read(path) {
         Ok(bytes) => bytes,
-        Err(err) => return Err(ReadChunkError::IoError(err)),
+        Err(err) => return Err(ReadChunkError::IOError(err)),
     };
 
     if file_bytes.len() < "XDF:".len() {
@@ -73,11 +66,10 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
                     }
                 }
 
-                
                 chunk_length = match num_length_bytes.1 {
                     4 => LittleEndian::read_u32(&bytes) as u64,
                     8 => LittleEndian::read_u64(&bytes),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
 
@@ -162,9 +154,9 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
 }
 
 #[derive(Debug)]
-pub enum Chunk<'a, Format> {
+pub enum Chunk<'a> {
     FileHeaderChunk(FileHeaderChunk),
-    StreamHeaderChunk(StreamHeaderChunk<Format>),
+    StreamHeaderChunk(StreamHeaderChunk),
     SamplesChunk(SamplesChunk<'a, Format>),
     ClockOffsetChunk(ClockOffsetChunk),
     BoundaryChunk(BoundaryChunk),
@@ -173,17 +165,61 @@ pub enum Chunk<'a, Format> {
 
 #[derive(Debug, Error)]
 pub enum ParseChunkError {
-    #[error("Error while parsing the chunk's xml")]
-    XMLParseError(xmltree::ParseError),
+    #[error(transparent)]
+    XMLParseError(#[from] xmltree::ParseError),
     #[error("The XML tag {0} either does not exist or contains invalid or no data")]
     MissingElementError(String),
     #[error("Version {0} is not supported")]
     VersionNotSupportedError(f32),
 }
 
-pub fn raw_chunk_to_chunk<'a, Format>(
+fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
+    let version_element = match root.get_child("version") {
+        Some(child) => child,
+
+        //XML does not contain the tag "version"
+        None => return Err(ParseChunkError::MissingElementError("version".to_owned())),
+    };
+
+    let version_str = {
+        match version_element.get_text() {
+            Some(val) => val,
+
+            //the version tag exists but it is empty
+            None => return Err(ParseChunkError::MissingElementError("version".to_owned())),
+        }
+    };
+
+    let version = {
+        match version_str.parse::<f32>() {
+            Ok(t) => t,
+
+            //the version text could not be parsed into a float
+            Err(e) => {
+                return Err(ParseChunkError::MissingElementError("version".to_owned()));
+            }
+        }
+    };
+
+    if version != 1.0 {
+        return Err(ParseChunkError::VersionNotSupportedError(version));
+    }
+
+    return Ok(version);
+}
+
+fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, ParseChunkError> {
+    Ok(root
+        .get_child(child_name)
+        .ok_or(ParseChunkError::MissingElementError(child_name.to_string()))?
+        .get_text()
+        .ok_or(ParseChunkError::MissingElementError(child_name.to_string()))?
+        .to_string())
+}
+
+pub fn raw_chunk_to_chunk<'a>(
     raw_chunk: RawChunk,
-) -> Result<Chunk<'a, Format>, ParseChunkError> {
+) -> Result<Chunk<'a>, ParseChunkError> {
     match raw_chunk.tag {
         Tag::FileHeader => {
             let root = {
@@ -193,43 +229,63 @@ pub fn raw_chunk_to_chunk<'a, Format>(
                 }
             };
 
-            let version_element = match root.get_child("version") {
-                Some(child) => child,
-                None => return Err(ParseChunkError::HeaderMissingVersionError),
-            };
-
-            let version_str = {
-                match version_element.get_text() {
-                    Some(val) => val,
-                    None => return Err(ParseChunkError::HeaderMissingVersionError),
-                }
-            };
-
-            let version = {
-                match version_str.parse::<f32>() {
-                    Ok(t) => t,
-                    Err(e) => {
-                        return Err(ParseChunkError::InvalidVersionError(format!(
-                            "Error while parsing version string into a double: {}",
-                            e
-                        )))
-                    }
-                }
-            };
-
-            if version != 1.0 {
-                return Err(ParseChunkError::InvalidVersionError(format!(
-                    "XDF version {} not supported. Only version 1.0 is supported.",
-                    version
-                )))
-            }
-
             return Ok(Chunk::FileHeaderChunk(FileHeaderChunk {
-                version,
+                version: parse_version(&root)?,
                 xml: root,
             }));
         }
-        Tag::StreamHeader => todo!(),
+
+        Tag::StreamHeader => {
+            //first 4 bytes are stream id
+            let id_bytes = &raw_chunk.content_bytes[..4];
+            let stream_id: u32 = LittleEndian::read_u32(id_bytes);
+
+            let root = {
+                match Element::parse(&raw_chunk.content_bytes[4..]) {
+                    Ok(root) => root,
+                    Err(err) => return Err(ParseChunkError::XMLParseError(err)),
+                }
+            };
+
+            let version = parse_version(&root)?;
+
+            let info = StreamHeaderChunkInfo {
+                name: get_text_from_child(&root, "name")?,
+                r#type: get_text_from_child(&root, "type")?,
+
+                //cursed
+                channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
+                    ParseChunkError::MissingElementError(format!(
+                        "Error while parsing channel count: {}",
+                        err
+                    ))
+                })?,
+                nominal_srate: get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
+                    ParseChunkError::MissingElementError(format!(
+                        "Error while parsing channel count: {}",
+                        err
+                    ))
+                })?,
+                channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
+                    "in8" => Format::Int8,
+                    "in16" => Format::Int16,
+                    "int32" => Format::Int32,
+                    "int64" => Format::Int64,
+                    "float32" => Format::Float32,
+                    "float64" => Format::Float64,
+                    "string" => Format::String,
+                    invalid => return Err(ParseChunkError::MissingElementError(format!("Invalid stream format \"{}\"", invalid))),
+                },
+                created_at: todo!(),
+                desc: todo!(),
+            };
+
+            return Ok(Chunk::StreamHeaderChunk(StreamHeaderChunk {
+                stream_id,
+                info: todo!(),
+                xml: todo!(),
+            }));
+        }
         Tag::Samples => todo!(),
         Tag::ClockOffset => todo!(),
         Tag::Boundary => return Ok(Chunk::BoundaryChunk(BoundaryChunk {})),

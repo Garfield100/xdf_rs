@@ -4,7 +4,7 @@ use assert_fs::{prelude::*, TempDir};
 #[test]
 fn invalid_path() {
     let res = read_file_to_raw_chunks("./does/not/exist.xdf");
-    assert!(matches!(res.unwrap_err(), ReadChunkError::IoError(_)))
+    assert!(matches!(res.unwrap_err(), ReadChunkError::IOError(_)))
 }
 
 #[test]

@@ -6,22 +6,44 @@ pub struct FileHeaderChunk {
     pub xml: Element,
 }
 
-//TODO: check what fields are and are not really mandatory.
 #[derive(Debug)]
-pub struct StreamHeaderChunkInfo<Format> {
+pub enum Format{
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Float32,
+    Float64,
+    String
+}
+
+//TODO: check what fields are and are not really mandatory.
+// so the minimal.xdf example file contains exactly the fields you can see in the
+// struct below. Strangely, the xml example in the xdf specification includes
+// more fields:
+// https://github.com/sccn/xdf/wiki/Specifications#streamheader-chunk
+// I have decided to go with the more minimal of the two so as not to error on
+// the most minimal.
+#[derive(Debug)]
+pub struct StreamHeaderChunkInfo {
     pub name: String,
     pub r#type: String, // "type" is obviously a reserved keyword but can be escaped using r#
     pub channel_count: u32,
     pub nominal_srate: f64,
     pub channel_format: Format,
+    //source_id
+    //version
     pub created_at: f64,
+    //uid
+    //session_id
+    //hostname
     pub desc: Element,
 }
 
 #[derive(Debug)]
-pub struct StreamHeaderChunk<Format> {
+pub struct StreamHeaderChunk {
     pub stream_id: u32,
-    pub info: StreamHeaderChunkInfo<Format>,
+    pub info: StreamHeaderChunkInfo,
     pub xml: Element,
 }
 
