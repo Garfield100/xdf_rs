@@ -157,7 +157,7 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
 pub enum Chunk<'a> {
     FileHeaderChunk(FileHeaderChunk),
     StreamHeaderChunk(StreamHeaderChunk),
-    SamplesChunk(SamplesChunk<'a, Format>),
+    SamplesChunk(SamplesChunk<'a>),
     ClockOffsetChunk(ClockOffsetChunk),
     BoundaryChunk(BoundaryChunk),
     StreamFooterChunk(StreamFooterChunk),
@@ -217,9 +217,7 @@ fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, Parse
         .to_string())
 }
 
-pub fn raw_chunk_to_chunk<'a>(
-    raw_chunk: RawChunk,
-) -> Result<Chunk<'a>, ParseChunkError> {
+pub fn raw_chunk_to_chunk<'a>(raw_chunk: RawChunk) -> Result<Chunk<'a>, ParseChunkError> {
     match raw_chunk.tag {
         Tag::FileHeader => {
             let root = {
@@ -252,21 +250,26 @@ pub fn raw_chunk_to_chunk<'a>(
             let info = StreamHeaderChunkInfo {
                 name: get_text_from_child(&root, "name")?,
                 r#type: get_text_from_child(&root, "type")?,
-
-                //cursed
-                channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
-                    ParseChunkError::MissingElementError(format!(
-                        "Error while parsing channel count: {}",
-                        err
-                    ))
-                })?,
-                nominal_srate: get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
-                    ParseChunkError::MissingElementError(format!(
-                        "Error while parsing channel count: {}",
-                        err
-                    ))
-                })?,
-                channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
+                channel_count: get_text_from_child(&root, "channel_count")?
+                    .parse()
+                    .map_err(|err| {
+                        ParseChunkError::MissingElementError(format!(
+                            "Error while parsing channel count: {}",
+                            err
+                        ))
+                    })?,
+                nominal_srate: get_text_from_child(&root, "nominal_srate")?
+                    .parse()
+                    .map_err(|err| {
+                        ParseChunkError::MissingElementError(format!(
+                            "Error while parsing channel count: {}",
+                            err
+                        ))
+                    })?,
+                channel_format: match get_text_from_child(&root, "channel_format")?
+                    .to_lowercase()
+                    .as_str()
+                {
                     "in8" => Format::Int8,
                     "in16" => Format::Int16,
                     "int32" => Format::Int32,
@@ -274,16 +277,30 @@ pub fn raw_chunk_to_chunk<'a>(
                     "float32" => Format::Float32,
                     "float64" => Format::Float64,
                     "string" => Format::String,
-                    invalid => return Err(ParseChunkError::MissingElementError(format!("Invalid stream format \"{}\"", invalid))),
+                    invalid => {
+                        return Err(ParseChunkError::MissingElementError(format!(
+                            "Invalid stream format \"{}\"",
+                            invalid
+                        )))
+                    }
                 },
-                created_at: todo!(),
-                desc: todo!(),
+                created_at: get_text_from_child(&root, "created_at")?
+                    .parse()
+                    .map_err(|err| {
+                        ParseChunkError::MissingElementError(format!(
+                            "Error while parsing creation date (as f64): {}",
+                            err
+                        ))
+                    })?,
+                desc: Some(root.get_child("desc").unwrap().clone()),
             };
+
+            
 
             return Ok(Chunk::StreamHeaderChunk(StreamHeaderChunk {
                 stream_id,
-                info: todo!(),
-                xml: todo!(),
+                info,
+                xml: root,
             }));
         }
         Tag::Samples => todo!(),

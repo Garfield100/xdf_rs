@@ -16,6 +16,18 @@ pub enum Format{
     Float64,
     String
 }
+//This is a little annoying. Do I remove the channel_format and Fomat struct
+//above entirely and just use the type of the sample's vector elements?
+#[derive(Debug)]
+pub enum SampleFormat{
+    Int8(i8),
+    Int16(i16),
+    Int32(i32),
+    Int64(i64),
+    Float32(f32),
+    Float64(f64),
+    String(String)
+}
 
 //TODO: check what fields are and are not really mandatory.
 // so the minimal.xdf example file contains exactly the fields you can see in the
@@ -37,7 +49,7 @@ pub struct StreamHeaderChunkInfo {
     //uid
     //session_id
     //hostname
-    pub desc: Element,
+    pub desc: Option<Element>,
 }
 
 #[derive(Debug)]
@@ -48,15 +60,15 @@ pub struct StreamHeaderChunk {
 }
 
 #[derive(Debug)]
-pub struct Sample<T> {
+pub struct Sample {
     pub timestamp: Option<f64>,
-    pub values: Vec<T>,
+    pub values: Vec<SampleFormat>,
 }
 
 #[derive(Debug)]
-pub struct SamplesChunk<'a, T> {
+pub struct SamplesChunk<'a> {
     pub stream_id: u32,
-    pub samples: Vec<&'a Sample<T>>,
+    pub samples: Vec<&'a Sample>,
 }
 
 #[derive(Debug)]

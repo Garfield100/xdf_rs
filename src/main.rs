@@ -12,6 +12,8 @@ fn main() {
 
     for raw_chunk in raw_chunks {
         println!("{:?}", raw_chunk.tag);
-        println!("{:#?}", raw_chunk_to_chunk::<u8>(raw_chunk));
+        println!("{:#?}", raw_chunk_to_chunk(raw_chunk));
     }
+
+    
 }   
