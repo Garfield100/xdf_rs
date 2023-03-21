@@ -286,7 +286,7 @@ pub fn raw_chunks_to_chunks<'a>(
                         .as_str()
                     {
                         "in8" => Format::Int8,
-                        "in16" => Format::Int16,
+                        "int16" => Format::Int16,
                         "int32" => Format::Int32,
                         "int64" => Format::Int64,
                         "float32" => Format::Float32,
