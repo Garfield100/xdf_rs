@@ -66,9 +66,9 @@ pub struct Sample {
 }
 
 #[derive(Debug)]
-pub struct SamplesChunk<'a> {
+pub struct SamplesChunk {
     pub stream_id: u32,
-    pub samples: Vec<&'a Sample>,
+    pub samples: Vec<Sample>,
 }
 
 #[derive(Debug)]

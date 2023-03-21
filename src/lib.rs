@@ -155,10 +155,10 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
 }
 
 #[derive(Debug)]
-pub enum Chunk<'a> {
+pub enum Chunk {
     FileHeaderChunk(FileHeaderChunk),
     StreamHeaderChunk(StreamHeaderChunk),
-    SamplesChunk(SamplesChunk<'a>),
+    SamplesChunk(SamplesChunk),
     ClockOffsetChunk(ClockOffsetChunk),
     BoundaryChunk(BoundaryChunk),
     StreamFooterChunk(StreamFooterChunk),
@@ -220,9 +220,9 @@ fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, Parse
         .to_string())
 }
 
-pub fn raw_chunks_to_chunks<'a>(
+pub fn raw_chunks_to_chunks(
     raw_chunks: Vec<RawChunk>,
-) -> Result<Vec<Chunk<'a>>, ParseChunkError> {
+) -> Result<Vec<Chunk>, ParseChunkError> {
     let mut chunks: Vec<Chunk> = vec![];
 
     //map channel IDs to format and channel counts from streamheader chunks to
@@ -368,20 +368,22 @@ pub fn raw_chunks_to_chunks<'a>(
                     Format::String => None,
                 };
 
-                let mut values: Vec<Value> = vec![];
-
                 let mut offset: usize = 4 + 1 + *num_samples_byte_num as usize;
+
+                let mut samples: Vec<Sample> = Vec::with_capacity(num_samples as usize);
+
                 //TODO is it worth having two loops only to not have to check
                 //inside?
                 //pro: performance? should test
                 //cons: duplicate code
                 if let Some(type_size) = type_size {
                     //constant size types
-                    for i in 0..num_samples {
+                    for _ in 0..num_samples {
+                        let mut values: Vec<Value> = Vec::with_capacity(*channel_count as usize);
                         let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
 
                         //values
-                        for j in 0..*channel_count {
+                        for _ in 0..*channel_count {
                             let value_bytes =
                                 &raw_chunk.content_bytes[offset..(offset + type_size as usize)];
                             let value: Value = match sample_format {
@@ -401,11 +403,14 @@ pub fn raw_chunks_to_chunks<'a>(
                             values.push(value);
                             offset += type_size as usize;
                         }
+
+                        samples.push(Sample { timestamp, values });
                     }
                 } else {
+                    let mut values: Vec<Value> = vec![];
                     let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
                     //strings
-                    for i in 0..num_samples {
+                    for _ in 0..num_samples {
                         let num_length_bytes: usize = raw_chunk.content_bytes[offset] as usize;
                         offset += 1;
                         let value_length = match num_length_bytes {
@@ -418,13 +423,20 @@ pub fn raw_chunks_to_chunks<'a>(
                         offset += num_length_bytes;
                         let mut value_bytes =
                             &raw_chunk.content_bytes[offset..(offset + value_length)];
+
                         //TODO what in the cursed and why
                         let mut value_string = String::new();
                         value_bytes.read_to_string(&mut value_string); //TODO handle utf8 err
+
+                        let value = Value::String(value_string);
+                        values.push(value);
                     }
+
+                    samples.push(Sample { timestamp, values });
                 }
 
-                todo!();
+                let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
+                chunks.push(samples_chunk);
             }
             Tag::ClockOffset => todo!(),
             Tag::Boundary => chunks.push(Chunk::BoundaryChunk(BoundaryChunk {})),
