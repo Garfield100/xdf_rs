@@ -262,8 +262,6 @@ pub fn raw_chunks_to_chunks<'a>(
                     }
                 };
 
-                let version = parse_version(&root)?;
-
                 let info = StreamHeaderChunkInfo {
                     name: get_text_from_child(&root, "name")?,
                     r#type: get_text_from_child(&root, "type")?,
