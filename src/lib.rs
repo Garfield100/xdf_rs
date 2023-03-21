@@ -181,7 +181,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
         Some(child) => child,
 
         //XML does not contain the tag "version"
-        None => return Err(ParseChunkError::MissingElementError("version".to_owned())),
+        None => return Err(ParseChunkError::MissingElementError("version".to_string())),
     };
 
     let version_str = {
@@ -189,7 +189,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
             Some(val) => val,
 
             //the version tag exists but it is empty
-            None => return Err(ParseChunkError::MissingElementError("version".to_owned())),
+            None => return Err(ParseChunkError::MissingElementError("version".to_string())),
         }
     };
 
@@ -199,7 +199,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
 
             //the version text could not be parsed into a float
             Err(e) => {
-                return Err(ParseChunkError::MissingElementError("version".to_owned()));
+                return Err(ParseChunkError::MissingElementError("version".to_string()));
             }
         }
     };
