@@ -56,12 +56,12 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
     while let Some(num_length_bytes) = content_iter.next() {
         let mut chunk_length: u64;
         match num_length_bytes.1 {
-            1 => chunk_length = content_iter.next().unwrap().1.clone() as u64,
+            1 => chunk_length = *content_iter.next().unwrap().1 as u64,
             4 | 8 => {
                 let mut bytes: Vec<u8> = vec![0; *num_length_bytes.1 as usize];
                 for i in 0..bytes.len() {
                     if let Some(next_byte) = content_iter.next() {
-                        bytes[i] = next_byte.1.clone();
+                        bytes[i] = * next_byte.1;
                     } else {
                         return Err(ReadChunkError::ParseError(EARLY_EOF.to_string()));
                     }
@@ -137,7 +137,7 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
         for i in 0..chunk_length {
             chunk_bytes[i] = {
                 match content_iter.next() {
-                    Some(val) => val.1.clone(),
+                    Some(val) => *val.1,
                     None => return Err(ReadChunkError::ParseError(EARLY_EOF.to_string())),
                 }
             };
