@@ -9,8 +9,9 @@ use xmltree::Element;
 
 use std::{
     borrow::Cow,
+    collections::HashMap,
     error::Error,
-    fmt::Display,
+    fmt::{format, Display},
     fs,
     io::{self, Read},
     path::Path,
@@ -171,6 +172,8 @@ pub enum ParseChunkError {
     MissingElementError(String),
     #[error("Version {0} is not supported")]
     VersionNotSupportedError(f32),
+    #[error("Other error. Reason: {0}")]
+    Other(String),
 }
 
 fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
@@ -217,95 +220,236 @@ fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, Parse
         .to_string())
 }
 
-pub fn raw_chunk_to_chunk<'a>(raw_chunk: RawChunk) -> Result<Chunk<'a>, ParseChunkError> {
-    match raw_chunk.tag {
-        Tag::FileHeader => {
-            let root = {
-                match Element::parse(raw_chunk.content_bytes.as_slice()) {
-                    Ok(root) => root,
-                    Err(err) => return Err(ParseChunkError::XMLParseError(err)),
-                }
-            };
+pub fn raw_chunks_to_chunks<'a>(
+    raw_chunks: Vec<RawChunk>,
+) -> Result<Vec<Chunk<'a>>, ParseChunkError> {
+    let mut chunks: Vec<Chunk> = vec![];
 
-            return Ok(Chunk::FileHeaderChunk(FileHeaderChunk {
-                version: parse_version(&root)?,
-                xml: root,
-            }));
-        }
+    //map channel IDs to format and channel counts from streamheader chunks to
+    //be able to parse sampole chunks
+    let mut stream_info_map = HashMap::<u32, (Format, u32)>::new();
 
-        Tag::StreamHeader => {
-            //first 4 bytes are stream id
-            let id_bytes = &raw_chunk.content_bytes[..4];
-            let stream_id: u32 = LittleEndian::read_u32(id_bytes);
+    for raw_chunk in raw_chunks {
+        //stream IDs are always the first 4 bytes.
+        //if the chunk does not have a stream ID we can just ignore these. All
+        //chunk content bytes are longer than 4 bytes anyway.
+        let id_bytes = &raw_chunk.content_bytes[..4];
+        let stream_id: u32 = LittleEndian::read_u32(id_bytes);
 
-            let root = {
-                match Element::parse(&raw_chunk.content_bytes[4..]) {
-                    Ok(root) => root,
-                    Err(err) => return Err(ParseChunkError::XMLParseError(err)),
-                }
-            };
-
-            let version = parse_version(&root)?;
-
-            let info = StreamHeaderChunkInfo {
-                name: get_text_from_child(&root, "name")?,
-                r#type: get_text_from_child(&root, "type")?,
-                channel_count: get_text_from_child(&root, "channel_count")?
-                    .parse()
-                    .map_err(|err| {
-                        ParseChunkError::MissingElementError(format!(
-                            "Error while parsing channel count: {}",
-                            err
-                        ))
-                    })?,
-                nominal_srate: get_text_from_child(&root, "nominal_srate")?
-                    .parse()
-                    .map_err(|err| {
-                        ParseChunkError::MissingElementError(format!(
-                            "Error while parsing channel count: {}",
-                            err
-                        ))
-                    })?,
-                channel_format: match get_text_from_child(&root, "channel_format")?
-                    .to_lowercase()
-                    .as_str()
-                {
-                    "in8" => Format::Int8,
-                    "in16" => Format::Int16,
-                    "int32" => Format::Int32,
-                    "int64" => Format::Int64,
-                    "float32" => Format::Float32,
-                    "float64" => Format::Float64,
-                    "string" => Format::String,
-                    invalid => {
-                        return Err(ParseChunkError::MissingElementError(format!(
-                            "Invalid stream format \"{}\"",
-                            invalid
-                        )))
+        match raw_chunk.tag {
+            Tag::FileHeader => {
+                let root = {
+                    match Element::parse(raw_chunk.content_bytes.as_slice()) {
+                        Ok(root) => root,
+                        Err(err) => return Err(ParseChunkError::XMLParseError(err)),
                     }
-                },
-                created_at: get_text_from_child(&root, "created_at")?
-                    .parse()
-                    .map_err(|err| {
-                        ParseChunkError::MissingElementError(format!(
-                            "Error while parsing creation date (as f64): {}",
-                            err
-                        ))
-                    })?,
-                desc: Some(root.get_child("desc").unwrap().clone()),
-            };
+                };
+                chunks.push(Chunk::FileHeaderChunk(FileHeaderChunk {
+                    version: parse_version(&root)?,
+                    xml: root,
+                }));
+            }
 
-            
+            Tag::StreamHeader => {
+                //first 4 bytes are stream id
+                let id_bytes = &raw_chunk.content_bytes[..4];
+                let stream_id: u32 = LittleEndian::read_u32(id_bytes);
 
-            return Ok(Chunk::StreamHeaderChunk(StreamHeaderChunk {
-                stream_id,
-                info,
-                xml: root,
-            }));
+                let root = {
+                    match Element::parse(&raw_chunk.content_bytes[4..]) {
+                        Ok(root) => root,
+                        Err(err) => return Err(ParseChunkError::XMLParseError(err)),
+                    }
+                };
+
+                let version = parse_version(&root)?;
+
+                let info = StreamHeaderChunkInfo {
+                    name: get_text_from_child(&root, "name")?,
+                    r#type: get_text_from_child(&root, "type")?,
+                    channel_count: get_text_from_child(&root, "channel_count")?
+                        .parse()
+                        .map_err(|err| {
+                            ParseChunkError::MissingElementError(format!(
+                                "Error while parsing channel count: {}",
+                                err
+                            ))
+                        })?,
+                    nominal_srate: get_text_from_child(&root, "nominal_srate")?
+                        .parse()
+                        .map_err(|err| {
+                            ParseChunkError::MissingElementError(format!(
+                                "Error while parsing channel count: {}",
+                                err
+                            ))
+                        })?,
+                    channel_format: match get_text_from_child(&root, "channel_format")?
+                        .to_lowercase()
+                        .as_str()
+                    {
+                        "in8" => Format::Int8,
+                        "in16" => Format::Int16,
+                        "int32" => Format::Int32,
+                        "int64" => Format::Int64,
+                        "float32" => Format::Float32,
+                        "float64" => Format::Float64,
+                        "string" => Format::String,
+                        invalid => {
+                            return Err(ParseChunkError::MissingElementError(format!(
+                                "Invalid stream format \"{}\"",
+                                invalid
+                            )))
+                        }
+                    },
+                    created_at: get_text_from_child(&root, "created_at")?.parse().map_err(
+                        |err| {
+                            ParseChunkError::MissingElementError(format!(
+                                "Error while parsing creation date (as f64): {}",
+                                err
+                            ))
+                        },
+                    )?,
+                    desc: Some(root.get_child("desc").unwrap().clone()),
+                };
+
+                stream_info_map.insert(stream_id, (info.channel_format, info.channel_count));
+
+                let stream_header_chunk = StreamHeaderChunk {
+                    stream_id,
+                    info,
+                    xml: root,
+                };
+
+                chunks.push(Chunk::StreamHeaderChunk(stream_header_chunk));
+            }
+            Tag::Samples => {
+                //number of bytes used to represent the number of samples contained
+                //in this chunk
+                let num_samples_byte_num = &raw_chunk.content_bytes[4];
+
+                //allow only valid options as per spec
+                match num_samples_byte_num {
+                    1 | 4 | 8 => (),
+                    _ => {
+                        return Err(ParseChunkError::Other(format!(
+                        "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
+                        num_samples_byte_num
+                    )))
+                    }
+                }
+
+                //vector of bytes which together form the number of samples
+                let num_samples_bytes =
+                    &raw_chunk.content_bytes[5..(5 + num_samples_byte_num) as usize];
+
+                //the actual number of samples
+                let num_samples: u64 =
+                    LittleEndian::read_uint(num_samples_bytes, *num_samples_byte_num as usize);
+
+                //TODO: bounds checks. probably use .get or something
+
+                //for numeric values:
+                //number of values = no. channels
+                //size of a sample = 1 + (0 or 8) + no. channels * size of type
+                //fuck, the timestamp thing makes it variable
+                //why
+                //realistically there will be timestamps for either all samples or
+                //for none of them but the spec technically allows for other stuff
+                //ffs
+
+                let (sample_format, channel_count) = stream_info_map.get(&stream_id).ok_or(ParseChunkError::Other(format!("Chunks in file are out of order or otherwise invalid: could not find stream header chunk for stream id {}", stream_id)))?;
+
+                //option here because string doesn't have a constant size
+                let type_size: Option<i32> = match sample_format {
+                    Format::Int8 => Some(1),
+                    Format::Int16 => Some(2),
+                    Format::Int32 => Some(4),
+                    Format::Int64 => Some(8),
+                    Format::Float32 => Some(4),
+                    Format::Float64 => Some(8),
+                    Format::String => None,
+                };
+
+                let mut values: Vec<Value> = vec![];
+
+                let mut offset: usize = 4 + 1 + *num_samples_byte_num as usize;
+                //TODO is it worth having two loops only to not have to check
+                //inside?
+                //pro: performance? should test
+                //cons: duplicate code
+                if let Some(type_size) = type_size {
+                    //constant size types
+                    for i in 0..num_samples {
+                        let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
+
+                        //values
+                        for j in 0..*channel_count {
+                            let value_bytes =
+                                &raw_chunk.content_bytes[offset..(offset + type_size as usize)];
+                            let value: Value = match sample_format {
+                                Format::Int8 => Value::Int8(value_bytes[0] as i8),
+                                Format::Int16 => Value::Int16(LittleEndian::read_i16(value_bytes)),
+                                Format::Int32 => Value::Int32(LittleEndian::read_i32(value_bytes)),
+                                Format::Int64 => Value::Int64(LittleEndian::read_i64(value_bytes)),
+                                Format::Float32 => {
+                                    Value::Float32(LittleEndian::read_f32(value_bytes))
+                                }
+                                Format::Float64 => {
+                                    Value::Float64(LittleEndian::read_f64(value_bytes))
+                                }
+                                Format::String => unreachable!(),
+                            };
+
+                            values.push(value);
+                            offset += type_size as usize;
+                        }
+                    }
+                } else {
+                    let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
+                    //strings
+                    for i in 0..num_samples {
+                        let num_length_bytes: usize = raw_chunk.content_bytes[offset] as usize;
+                        offset += 1;
+                        let value_length = match num_length_bytes {
+                            4 | 8 => LittleEndian::read_uint(
+                                &raw_chunk.content_bytes[offset..(offset + num_length_bytes)],
+                                num_length_bytes,
+                            ),
+                            _ => todo!(), //TODO error properly
+                        } as usize;
+                        offset += num_length_bytes;
+                        let mut value_bytes =
+                            &raw_chunk.content_bytes[offset..(offset + value_length)];
+                        //TODO what in the cursed and why
+                        let mut value_string = String::new();
+                        value_bytes.read_to_string(&mut value_string); //TODO handle utf8 err
+                    }
+                }
+
+                todo!();
+            }
+            Tag::ClockOffset => todo!(),
+            Tag::Boundary => chunks.push(Chunk::BoundaryChunk(BoundaryChunk {})),
+            Tag::StreamFooter => todo!(),
         }
-        Tag::Samples => todo!(),
-        Tag::ClockOffset => todo!(),
-        Tag::Boundary => return Ok(Chunk::BoundaryChunk(BoundaryChunk {})),
-        Tag::StreamFooter => todo!(),
     }
+
+    return Ok(chunks);
+}
+
+fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Option<f64> {
+    let timestamp: Option<f64>;
+    if raw_chunk.content_bytes[*offset] == 8 {
+        //we have a timestamp
+        timestamp = Some(LittleEndian::read_f64(
+            &raw_chunk.content_bytes[(*offset + 1)..(*offset + 9)],
+        ));
+        *offset += 9;
+    } else {
+        //no timestamp
+        timestamp = None;
+        *offset += 1;
+    }
+
+    return timestamp;
 }
