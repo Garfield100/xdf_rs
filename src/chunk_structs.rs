@@ -6,7 +6,7 @@ pub struct FileHeaderChunk {
     pub xml: Element,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Format{
     Int8,
     Int16,
@@ -19,7 +19,7 @@ pub enum Format{
 //This is a little annoying. Do I remove the channel_format and Fomat struct
 //above entirely and just use the type of the sample's vector elements?
 #[derive(Debug)]
-pub enum SampleFormat{
+pub enum Value{
     Int8(i8),
     Int16(i16),
     Int32(i32),
@@ -62,7 +62,7 @@ pub struct StreamHeaderChunk {
 #[derive(Debug)]
 pub struct Sample {
     pub timestamp: Option<f64>,
-    pub values: Vec<SampleFormat>,
+    pub values: Vec<Value>,
 }
 
 #[derive(Debug)]
@@ -82,9 +82,9 @@ pub struct ClockOffsetChunk {
 #[derive(Debug)]
 pub struct BoundaryChunk {}
 
-//TODO: check what fields are and are not really mandatory. If we don't have
-//first or last timestamps given, is it ok if we instead determine those
-//ourselves?
+//TODO: check what fields are and are not really mandatory
+//If we don't have first or last timestamps given, is it ok if we instead
+//determine those ourselves?
 #[derive(Debug)]
 pub struct StreamFooterChunkInfo {
     pub first_timestamp: Option<f64>,
