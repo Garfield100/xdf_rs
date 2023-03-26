@@ -197,6 +197,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
         match version_str.parse::<f32>() {
             Ok(t) => t,
 
+            //TODO improve this error handling
             //the version text could not be parsed into a float
             Err(e) => {
                 return Err(ParseChunkError::MissingElementError("version".to_string()));
@@ -220,9 +221,7 @@ fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, Parse
         .to_string())
 }
 
-pub fn raw_chunks_to_chunks(
-    raw_chunks: Vec<RawChunk>,
-) -> Result<Vec<Chunk>, ParseChunkError> {
+pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, ParseChunkError> {
     let mut chunks: Vec<Chunk> = vec![];
 
     //map channel IDs to format and channel counts from streamheader chunks to
@@ -235,7 +234,7 @@ pub fn raw_chunks_to_chunks(
         //chunk content bytes are longer than 4 bytes anyway.
         let id_bytes = &raw_chunk.content_bytes[..4];
         let stream_id: u32 = LittleEndian::read_u32(id_bytes);
-
+        println!("{:?}", raw_chunk.tag);
         match raw_chunk.tag {
             Tag::FileHeader => {
                 let root = {
@@ -324,6 +323,9 @@ pub fn raw_chunks_to_chunks(
                 //number of bytes used to represent the number of samples contained
                 //in this chunk
                 let num_samples_byte_num = &raw_chunk.content_bytes[4];
+                println!("Sample chunk bytes:\n{:?}", raw_chunk.content_bytes);
+                println!("Sample chunk length: {}", raw_chunk.content_bytes.len());
+                println!("Sample chunk stream id: {}", stream_id);
 
                 //allow only valid options as per spec
                 match num_samples_byte_num {
@@ -368,6 +370,10 @@ pub fn raw_chunks_to_chunks(
                     Format::String => None,
                 };
 
+                //offset:
+                // 4 bytes for streamID
+                // 1 byte for number of bytes for sample count
+                // num_samples_byte_num for sample count
                 let mut offset: usize = 4 + 1 + *num_samples_byte_num as usize;
 
                 let mut samples: Vec<Sample> = Vec::with_capacity(num_samples as usize);
@@ -403,7 +409,8 @@ pub fn raw_chunks_to_chunks(
                             values.push(value);
                             offset += type_size as usize;
                         }
-
+                        
+                        println!("Values: {:?}", &values);
                         samples.push(Sample { timestamp, values });
                     }
                 } else {
@@ -412,15 +419,22 @@ pub fn raw_chunks_to_chunks(
                     //strings
                     for _ in 0..num_samples {
                         let num_length_bytes: usize = raw_chunk.content_bytes[offset] as usize;
-                        offset += 1;
+                        offset += 1; //for number of length bytes field
                         let value_length = match num_length_bytes {
-                            4 | 8 => LittleEndian::read_uint(
+                            1 | 4 | 8 => LittleEndian::read_uint(
                                 &raw_chunk.content_bytes[offset..(offset + num_length_bytes)],
                                 num_length_bytes,
                             ),
-                            _ => todo!(), //TODO error properly
+                            _ => {
+                                println!("Error: Number of length bytes for this value are invalid. Expected either 4 or 8 but got {}", num_length_bytes);
+                                println!("num_length_bytes: {}", num_length_bytes);
+                                println!("offset: {}", offset);
+                                println!("Chunk bytes len: {}", &raw_chunk.content_bytes.len());
+                                println!("Chunk bytes:\n{:?}", &raw_chunk.content_bytes);
+                                panic!();
+                            } //TODO error properly
                         } as usize;
-                        offset += num_length_bytes;
+                        offset += num_length_bytes; // for length field
                         let mut value_bytes =
                             &raw_chunk.content_bytes[offset..(offset + value_length)];
 
@@ -428,14 +442,17 @@ pub fn raw_chunks_to_chunks(
                         let mut value_string = String::new();
                         value_bytes.read_to_string(&mut value_string); //TODO handle utf8 err
 
+                        println!("String value: {}", &value_string);
                         let value = Value::String(value_string);
                         values.push(value);
+                        offset += value_length; // for value field
+                        offset += 1; // ???
                     }
-
                     samples.push(Sample { timestamp, values });
                 }
 
                 let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
+                // println!("{:#?}", &samples_chunk);
                 chunks.push(samples_chunk);
             }
             Tag::ClockOffset => todo!(),
