@@ -390,10 +390,9 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                         samples.push(Sample { timestamp, values });
                     }
                 } else {
-                    let mut values: Vec<Value> = vec![];
-                    let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
                     //strings
                     for _ in 0..num_samples {
+                        let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
                         let num_length_bytes: usize = raw_chunk.content_bytes[offset] as usize;
                         offset += 1; //for number of length bytes field
                         let value_length = match num_length_bytes {
@@ -419,11 +418,11 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
 
                         println!("String value: {}", &value_string);
                         let value = Value::String(value_string);
-                        values.push(value);
+                        let mut value_vec = Vec::with_capacity(1);
+                        value_vec.push(value); // we need to put this into a vec with one element due to how the sample struct works
+                        samples.push(Sample { timestamp, values: value_vec });
                         offset += value_length; // for value field
-                        offset += 1; // ???
                     }
-                    samples.push(Sample { timestamp, values });
                 }
 
                 let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
