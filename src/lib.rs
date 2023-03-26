@@ -61,7 +61,7 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
                 let mut bytes: Vec<u8> = vec![0; *num_length_bytes.1 as usize];
                 for i in 0..bytes.len() {
                     if let Some(next_byte) = content_iter.next() {
-                        bytes[i] = * next_byte.1;
+                        bytes[i] = *next_byte.1;
                     } else {
                         return Err(ReadChunkError::ParseError(EARLY_EOF.to_string()));
                     }
@@ -99,9 +99,7 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
         let chunk_tag: Tag = match chunk_tag_num {
             1 => {
                 if file_header_found {
-                    return Err(ReadChunkError::ParseError(format!(
-                        "More than one FileHeaders found."
-                    )));
+                    return Err(ReadChunkError::ParseError(format!("More than one FileHeaders found.")));
                 }
                 file_header_found = true;
                 Tag::FileHeader
@@ -264,26 +262,13 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 let info = StreamHeaderChunkInfo {
                     name: get_text_from_child(&root, "name")?,
                     r#type: get_text_from_child(&root, "type")?,
-                    channel_count: get_text_from_child(&root, "channel_count")?
-                        .parse()
-                        .map_err(|err| {
-                            ParseChunkError::MissingElementError(format!(
-                                "Error while parsing channel count: {}",
-                                err
-                            ))
-                        })?,
-                    nominal_srate: get_text_from_child(&root, "nominal_srate")?
-                        .parse()
-                        .map_err(|err| {
-                            ParseChunkError::MissingElementError(format!(
-                                "Error while parsing channel count: {}",
-                                err
-                            ))
-                        })?,
-                    channel_format: match get_text_from_child(&root, "channel_format")?
-                        .to_lowercase()
-                        .as_str()
-                    {
+                    channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
+                        ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
+                    })?,
+                    nominal_srate: get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
+                        ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
+                    })?,
+                    channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
                         "in8" => Format::Int8,
                         "int16" => Format::Int16,
                         "int32" => Format::Int32,
@@ -298,14 +283,12 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                             )))
                         }
                     },
-                    created_at: get_text_from_child(&root, "created_at")?.parse().map_err(
-                        |err| {
-                            ParseChunkError::MissingElementError(format!(
-                                "Error while parsing creation date (as f64): {}",
-                                err
-                            ))
-                        },
-                    )?,
+                    created_at: get_text_from_child(&root, "created_at")?.parse().map_err(|err| {
+                        ParseChunkError::MissingElementError(format!(
+                            "Error while parsing creation date (as f64): {}",
+                            err
+                        ))
+                    })?,
                     desc: Some(root.get_child("desc").unwrap().clone()),
                 };
 
@@ -332,19 +315,17 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     1 | 4 | 8 => (),
                     _ => {
                         return Err(ParseChunkError::Other(format!(
-                        "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
-                        num_samples_byte_num
-                    )))
+                            "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
+                            num_samples_byte_num
+                        )))
                     }
                 }
 
                 //vector of bytes which together form the number of samples
-                let num_samples_bytes =
-                    &raw_chunk.content_bytes[5..(5 + num_samples_byte_num) as usize];
+                let num_samples_bytes = &raw_chunk.content_bytes[5..(5 + num_samples_byte_num) as usize];
 
                 //the actual number of samples
-                let num_samples: u64 =
-                    LittleEndian::read_uint(num_samples_bytes, *num_samples_byte_num as usize);
+                let num_samples: u64 = LittleEndian::read_uint(num_samples_bytes, *num_samples_byte_num as usize);
 
                 //TODO: bounds checks. probably use .get or something
 
@@ -390,26 +371,21 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
 
                         //values
                         for _ in 0..*channel_count {
-                            let value_bytes =
-                                &raw_chunk.content_bytes[offset..(offset + type_size as usize)];
+                            let value_bytes = &raw_chunk.content_bytes[offset..(offset + type_size as usize)];
                             let value: Value = match sample_format {
                                 Format::Int8 => Value::Int8(value_bytes[0] as i8),
                                 Format::Int16 => Value::Int16(LittleEndian::read_i16(value_bytes)),
                                 Format::Int32 => Value::Int32(LittleEndian::read_i32(value_bytes)),
                                 Format::Int64 => Value::Int64(LittleEndian::read_i64(value_bytes)),
-                                Format::Float32 => {
-                                    Value::Float32(LittleEndian::read_f32(value_bytes))
-                                }
-                                Format::Float64 => {
-                                    Value::Float64(LittleEndian::read_f64(value_bytes))
-                                }
+                                Format::Float32 => Value::Float32(LittleEndian::read_f32(value_bytes)),
+                                Format::Float64 => Value::Float64(LittleEndian::read_f64(value_bytes)),
                                 Format::String => unreachable!(),
                             };
 
                             values.push(value);
                             offset += type_size as usize;
                         }
-                        
+
                         println!("Values: {:?}", &values);
                         samples.push(Sample { timestamp, values });
                     }
@@ -435,8 +411,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                             } //TODO error properly
                         } as usize;
                         offset += num_length_bytes; // for length field
-                        let mut value_bytes =
-                            &raw_chunk.content_bytes[offset..(offset + value_length)];
+                        let mut value_bytes = &raw_chunk.content_bytes[offset..(offset + value_length)];
 
                         //TODO what in the cursed and why
                         let mut value_string = String::new();
