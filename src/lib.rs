@@ -420,7 +420,10 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                         let value = Value::String(value_string);
                         let mut value_vec = Vec::with_capacity(1);
                         value_vec.push(value); // we need to put this into a vec with one element due to how the sample struct works
-                        samples.push(Sample { timestamp, values: value_vec });
+                        samples.push(Sample {
+                            timestamp,
+                            values: value_vec,
+                        });
                         offset += value_length; // for value field
                     }
                 }
@@ -429,7 +432,17 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 // println!("{:#?}", &samples_chunk);
                 chunks.push(samples_chunk);
             }
-            Tag::ClockOffset => todo!(),
+            Tag::ClockOffset => {
+                let collection_time: f64 = LittleEndian::read_f64(&raw_chunk.content_bytes[4..12]);
+                let offset_value: f64 = LittleEndian::read_f64(&raw_chunk.content_bytes[12..20]);
+
+                let clock_offset_chunk = Chunk::ClockOffsetChunk(ClockOffsetChunk {
+                    stream_id,
+                    collection_time,
+                    offset_value,
+                });
+                chunks.push(clock_offset_chunk);
+            }
             Tag::Boundary => chunks.push(Chunk::BoundaryChunk(BoundaryChunk {})),
             Tag::StreamFooter => todo!(),
         }
