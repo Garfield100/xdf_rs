@@ -71,12 +71,12 @@ pub struct SamplesChunk {
     pub samples: Vec<Sample>,
 }
 
+//collection_time and offset_value are in seconds
 #[derive(Debug)]
-// TODO: check whether or not these offsets can be negative
 pub struct ClockOffsetChunk {
     pub stream_id: u32,
-    pub collection_time: u64,
-    pub offset_value: u64,
+    pub collection_time: f64,
+    pub offset_value: f64,
 }
 
 #[derive(Debug)]
