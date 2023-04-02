@@ -7,32 +7,32 @@ pub struct FileHeaderChunk {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Format{
+pub enum Format {
     Int8,
     Int16,
     Int32,
     Int64,
     Float32,
     Float64,
-    String
+    String,
 }
 //This is a little annoying. Do I remove the channel_format and Fomat struct
 //above entirely and just use the type of the sample's vector elements?
 #[derive(Debug)]
-pub enum Value{
+pub enum Value {
     Int8(i8),
     Int16(i16),
     Int32(i32),
     Int64(i64),
     Float32(f32),
     Float64(f64),
-    String(String)
+    String(String),
 }
 
 //TODO: check what fields are and are not really mandatory.
-// so the minimal.xdf example file contains exactly the fields you can see in the
-// struct below. Strangely, the xml example in the xdf specification includes
-// more fields:
+// so the minimal.xdf example file contains exactly the fields you can see in
+// the struct below. Strangely, the xml example in the xdf specification
+// includes more fields:
 // https://github.com/sccn/xdf/wiki/Specifications#streamheader-chunk
 // I have decided to go with the more minimal of the two so as not to error on
 // the most minimal.

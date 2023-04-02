@@ -332,7 +332,8 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 //TODO: bounds checks. probably use .get or something
 
                 if stream_num_samples_map.contains_key(&stream_id) {
-                    stream_num_samples_map.insert(stream_id, stream_num_samples_map.get(&stream_id).unwrap() + num_samples);
+                    stream_num_samples_map
+                        .insert(stream_id, stream_num_samples_map.get(&stream_id).unwrap() + num_samples);
                 } else {
                     stream_num_samples_map.insert(stream_id, num_samples);
                 }
@@ -499,12 +500,13 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     // time, for example in an event stream), this value must be 0."
 
                     //we need the number of samples ;-;
-                    if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) = (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp) {
+                    if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
+                        (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
+                    {
                         (last_timestamp - first_timestamp) / *num_samples as f64
                     } else {
                         0.0
                     }
-
                 };
 
                 //TODO if nominal_srate is zero, measured_srate is irrelevant/should be zero or None
