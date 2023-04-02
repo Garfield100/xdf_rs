@@ -41,7 +41,7 @@ pub struct StreamHeaderChunkInfo {
     pub name: String,
     pub r#type: String, // "type" is obviously a reserved keyword but can be escaped using r#
     pub channel_count: u32,
-    pub nominal_srate: f64,
+    pub nominal_srate: Option<f64>,
     pub channel_format: Format,
     //source_id
     //version
@@ -90,7 +90,7 @@ pub struct StreamFooterChunkInfo {
     pub first_timestamp: Option<f64>,
     pub last_timestamp: Option<f64>,
     pub sample_count: u64,
-    pub measured_srate: f64,
+    pub measured_srate: Option<f64>,
 }
 
 #[derive(Debug)]

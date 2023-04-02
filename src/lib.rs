@@ -267,9 +267,9 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
                         ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
                     })?,
-                    nominal_srate: get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
+                    nominal_srate: Some(get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
                         ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
-                    })?,
+                    })?),
                     channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
                         "in8" => Format::Int8,
                         "int16" => Format::Int16,
@@ -490,20 +490,22 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 let measured_srate = if let Some(val) = measured_srate {
                     val
                 } else {
-                    //TODO manually calculate srate
+                    // TODO manually calculate srate
 
-                    //srate is missing, so we calculate it ourselves
-                    //what to do when we have no timestamps?
-                    //should probably be an option tbh
-                    //nominal_srate is given as "a floating point number in Hertz. If the stream
+                    // measured_srate is missing, so we calculate it ourselves
+
+                    // nominal_srate is given as "a floating point number in Hertz. If the stream
                     // has an irregular sampling rate (that is, the samples are not spaced evenly in
                     // time, for example in an event stream), this value must be 0."
-
-                    //we need the number of samples ;-;
+                    
                     if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
                         (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
                     {
-                        (last_timestamp - first_timestamp) / *num_samples as f64
+                        if *num_samples == 0 {
+                            0.0 // don't divide by zero :)
+                        } else {
+                            (last_timestamp - first_timestamp) / *num_samples as f64
+                        }
                     } else {
                         0.0
                     }
@@ -519,7 +521,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     sample_count: get_text_from_child(&root, "sample_count")?.parse().map_err(|err| {
                         ParseChunkError::MissingElementError(format!("Error while parsing sample count: {}", err))
                     })?,
-                    measured_srate,
+                    measured_srate: Some(measured_srate),
                 };
 
                 let stream_footer_chunk = Chunk::StreamFooterChunk(StreamFooterChunk {
