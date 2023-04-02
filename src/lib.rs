@@ -7,6 +7,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use thiserror::Error;
 use xmltree::Element;
 
+use core::num;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -225,6 +226,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
     //map channel IDs to format and channel counts from streamheader chunks to
     //be able to parse sampole chunks
     let mut stream_info_map = HashMap::<u32, (Format, u32)>::new();
+    let mut stream_num_samples_map = HashMap::<u32, u64>::new();
 
     for raw_chunk in raw_chunks {
         //stream IDs are always the first 4 bytes.
@@ -329,6 +331,12 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
 
                 //TODO: bounds checks. probably use .get or something
 
+                if stream_num_samples_map.contains_key(&stream_id) {
+                    stream_num_samples_map.insert(stream_id, stream_num_samples_map.get(&stream_id).unwrap() + num_samples);
+                } else {
+                    stream_num_samples_map.insert(stream_id, num_samples);
+                }
+
                 //for numeric values:
                 //number of values = no. channels
                 //size of a sample = 1 + (0 or 8) + no. channels * size of type
@@ -419,7 +427,8 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                         println!("String value: {}", &value_string);
                         let value = Value::String(value_string);
                         let mut value_vec = Vec::with_capacity(1);
-                        value_vec.push(value); // we need to put this into a vec with one element due to how the sample struct works
+                        value_vec.push(value); // we need to put this into a vec with one element due to how the sample struct
+                                               // works
                         samples.push(Sample {
                             timestamp,
                             values: value_vec,
@@ -444,11 +453,101 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 chunks.push(clock_offset_chunk);
             }
             Tag::Boundary => chunks.push(Chunk::BoundaryChunk(BoundaryChunk {})),
-            Tag::StreamFooter => todo!(),
+            Tag::StreamFooter => {
+                //first 4 bytes are stream id
+                let id_bytes = &raw_chunk.content_bytes[..4];
+                let stream_id: u32 = LittleEndian::read_u32(id_bytes);
+
+                let root = {
+                    match Element::parse(&raw_chunk.content_bytes[4..]) {
+                        Ok(root) => root,
+                        Err(err) => return Err(ParseChunkError::XMLParseError(err)),
+                    }
+                };
+
+                // let a = &root
+                // .get_child("first_timestamp")
+                // .ok_or(ParseChunkError::MissingElementError("first_timestamp".to_string()))?
+                // .get_text()
+                // .ok_or(ParseChunkError::MissingElementError("first_timestamp".to_string()))?
+                // .to_string();
+
+                println!("{:#?}", &root);
+
+                // get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
+                //     ParseChunkError::MissingElementError(format!("Error while parsing channel
+                // count: {}", err)) })?
+
+                let first_timestamp_str = get_text_from_child(&root, "first_timestamp").ok();
+                let last_timestamp_str = get_text_from_child(&root, "last_timestamp").ok();
+                let measured_srate_str = get_text_from_child(&root, "measured_srate").ok();
+
+                let first_timestamp = opt_string_to_f64(first_timestamp_str)?;
+                let last_timestamp = opt_string_to_f64(last_timestamp_str)?;
+                let measured_srate = opt_string_to_f64(measured_srate_str)?;
+
+                let measured_srate = if let Some(val) = measured_srate {
+                    val
+                } else {
+                    //TODO manually calculate srate
+
+                    //srate is missing, so we calculate it ourselves
+                    //what to do when we have no timestamps?
+                    //should probably be an option tbh
+                    //nominal_srate is given as "a floating point number in Hertz. If the stream
+                    // has an irregular sampling rate (that is, the samples are not spaced evenly in
+                    // time, for example in an event stream), this value must be 0."
+
+                    //we need the number of samples ;-;
+                    if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) = (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp) {
+                        (last_timestamp - first_timestamp) / *num_samples as f64
+                    } else {
+                        0.0
+                    }
+
+                };
+
+                //TODO if nominal_srate is zero, measured_srate is irrelevant/should be zero or None
+
+                // get_text_from_child(&root, "measured_srate")?.parse();
+
+                let info = StreamFooterChunkInfo {
+                    first_timestamp,
+                    last_timestamp,
+                    sample_count: get_text_from_child(&root, "sample_count")?.parse().map_err(|err| {
+                        ParseChunkError::MissingElementError(format!("Error while parsing sample count: {}", err))
+                    })?,
+                    measured_srate,
+                };
+
+                let stream_footer_chunk = Chunk::StreamFooterChunk(StreamFooterChunk {
+                    stream_id,
+                    info,
+                    xml: root,
+                });
+
+                chunks.push(stream_footer_chunk);
+            }
         }
     }
 
     return Ok(chunks);
+}
+
+fn opt_string_to_f64(opt_string: Option<String>) -> Result<Option<f64>, ParseChunkError> {
+    match opt_string {
+        Some(val_str) => {
+            let val_res = val_str.parse::<f64>();
+            match val_res {
+                Ok(val) => Ok(Some(val)),
+                Err(err) => Err(ParseChunkError::MissingElementError(format!(
+                    "Error while parsing {}: {}",
+                    val_str, err
+                ))),
+            }
+        }
+        None => Ok(None),
+    }
 }
 
 fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Option<f64> {
