@@ -225,7 +225,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
 
     //map channel IDs to format and channel counts from streamheader chunks to
     //be able to parse sampole chunks
-    let mut stream_info_map = HashMap::<u32, (Format, u32)>::new();
+    let mut stream_info_map = HashMap::<u32, StreamHeaderChunkInfo>::new();
     let mut stream_num_samples_map = HashMap::<u32, u64>::new();
 
     for raw_chunk in raw_chunks {
@@ -294,7 +294,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     desc: Some(root.get_child("desc").unwrap().clone()),
                 };
 
-                stream_info_map.insert(stream_id, (info.channel_format, info.channel_count));
+                stream_info_map.insert(stream_id, info.clone());
 
                 let stream_header_chunk = StreamHeaderChunk {
                     stream_id,
@@ -347,10 +347,10 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 //for none of them but the spec technically allows for other stuff
                 //ffs
 
-                let (sample_format, channel_count) = stream_info_map.get(&stream_id).ok_or(ParseChunkError::Other(format!("Chunks in file are out of order or otherwise invalid: could not find stream header chunk for stream id {}", stream_id)))?;
+                let stream_info = stream_info_map.get(&stream_id).ok_or(ParseChunkError::Other(format!("Chunks in file are out of order or otherwise invalid: could not find stream header chunk for stream id {}", stream_id)))?;
 
                 //option here because string doesn't have a constant size
-                let type_size: Option<i32> = match sample_format {
+                let type_size: Option<i32> = match stream_info.channel_format {
                     Format::Int8 => Some(1),
                     Format::Int16 => Some(2),
                     Format::Int32 => Some(4),
@@ -375,13 +375,13 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 if let Some(type_size) = type_size {
                     //constant size types
                     for _ in 0..num_samples {
-                        let mut values: Vec<Value> = Vec::with_capacity(*channel_count as usize);
+                        let mut values: Vec<Value> = Vec::with_capacity(stream_info.channel_count as usize);
                         let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
 
                         //values
-                        for _ in 0..*channel_count {
+                        for _ in 0..stream_info.channel_count {
                             let value_bytes = &raw_chunk.content_bytes[offset..(offset + type_size as usize)];
-                            let value: Value = match sample_format {
+                            let value: Value = match stream_info.channel_format {
                                 Format::Int8 => Value::Int8(value_bytes[0] as i8),
                                 Format::Int16 => Value::Int16(LittleEndian::read_i16(value_bytes)),
                                 Format::Int32 => Value::Int32(LittleEndian::read_i32(value_bytes)),
@@ -490,14 +490,12 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 let measured_srate = if let Some(val) = measured_srate {
                     val
                 } else {
-                    // TODO manually calculate srate
-
                     // measured_srate is missing, so we calculate it ourselves
 
                     // nominal_srate is given as "a floating point number in Hertz. If the stream
                     // has an irregular sampling rate (that is, the samples are not spaced evenly in
                     // time, for example in an event stream), this value must be 0."
-                    
+
                     if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
                         (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
                     {
@@ -511,7 +509,15 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     }
                 };
 
-                //TODO if nominal_srate is zero, measured_srate is irrelevant/should be zero or None
+                let stream_info = stream_info_map.get(&stream_id).unwrap(); // TODO error properly
+
+                // if nominal_srate is given as zero (so it is None), measured_srate is also irrelevant
+                let measured_srate = match stream_info.nominal_srate {
+                    Some(_) => Some(measured_srate),
+                    None => None,
+                };
+
+                
 
                 // get_text_from_child(&root, "measured_srate")?.parse();
 
@@ -521,7 +527,7 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     sample_count: get_text_from_child(&root, "sample_count")?.parse().map_err(|err| {
                         ParseChunkError::MissingElementError(format!("Error while parsing sample count: {}", err))
                     })?,
-                    measured_srate: Some(measured_srate),
+                    measured_srate,
                 };
 
                 let stream_footer_chunk = Chunk::StreamFooterChunk(StreamFooterChunk {

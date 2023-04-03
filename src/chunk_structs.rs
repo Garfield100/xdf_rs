@@ -36,7 +36,7 @@ pub enum Value {
 // https://github.com/sccn/xdf/wiki/Specifications#streamheader-chunk
 // I have decided to go with the more minimal of the two so as not to error on
 // the most minimal.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StreamHeaderChunkInfo {
     pub name: String,
     pub r#type: String, // "type" is obviously a reserved keyword but can be escaped using r#
