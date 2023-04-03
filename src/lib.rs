@@ -308,9 +308,6 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 //number of bytes used to represent the number of samples contained
                 //in this chunk
                 let num_samples_byte_num = &raw_chunk.content_bytes[4];
-                println!("Sample chunk bytes:\n{:?}", raw_chunk.content_bytes);
-                println!("Sample chunk length: {}", raw_chunk.content_bytes.len());
-                println!("Sample chunk stream id: {}", stream_id);
 
                 //allow only valid options as per spec
                 match num_samples_byte_num {
@@ -439,7 +436,6 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 }
 
                 let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
-                // println!("{:#?}", &samples_chunk);
                 chunks.push(samples_chunk);
             }
             Tag::ClockOffset => {
@@ -465,19 +461,6 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                         Err(err) => return Err(ParseChunkError::XMLParseError(err)),
                     }
                 };
-
-                // let a = &root
-                // .get_child("first_timestamp")
-                // .ok_or(ParseChunkError::MissingElementError("first_timestamp".to_string()))?
-                // .get_text()
-                // .ok_or(ParseChunkError::MissingElementError("first_timestamp".to_string()))?
-                // .to_string();
-
-                println!("{:#?}", &root);
-
-                // get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
-                //     ParseChunkError::MissingElementError(format!("Error while parsing channel
-                // count: {}", err)) })?
 
                 let first_timestamp_str = get_text_from_child(&root, "first_timestamp").ok();
                 let last_timestamp_str = get_text_from_child(&root, "last_timestamp").ok();
