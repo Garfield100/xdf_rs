@@ -3,6 +3,7 @@
 #![warn(array_into_iter)]
 #![crate_type = "lib"]
 
+// TODO remove unused imports
 use byteorder::{ByteOrder, LittleEndian};
 use thiserror::Error;
 use xmltree::Element;
@@ -22,6 +23,7 @@ use std::{
 mod chunk_structs;
 use crate::chunk_structs::*;
 
+// TODO possibly improve errors
 #[derive(Debug, Error)]
 pub enum ReadChunkError {
     #[error("Could not parse file: {0}")]
@@ -31,38 +33,54 @@ pub enum ReadChunkError {
     IOError(#[from] io::Error),
 }
 
+// TODO: turn these into enum variants of ReadChunkError
 pub const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
 pub const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
 pub const EARLY_EOF: &str = "Reached EOF early";
 
-pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>, ReadChunkError> {
-    let file_bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(err) => return Err(ReadChunkError::IOError(err)),
-    };
+// TODO: accept iterator/reader instead of path
+pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, ReadChunkError> {
+    // let file_bytes = match fs::read(path) {
+    //     Ok(bytes) => bytes,
+    //     Err(err) => return Err(ReadChunkError::IOError(err)),
+    // };
 
-    if file_bytes.len() < "XDF:".len() {
-        return Err(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()));
-    }
-
-    if &file_bytes[0..4] != "XDF:".as_bytes() {
-        return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
-    }
+    // if file_bytes.len() < "XDF:".len() {
+    //     return Err(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()));
+    // }
 
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
-    let mut content_iter = file_bytes.iter().enumerate().peekable().skip("XDF:".len());
+    // let mut content_iter = file_bytes.iter().enumerate().peekable().skip("XDF:".len());
+    let mut content_iter = reader
+        .bytes()
+        .peekable()
+        // TODO remove this unwrap, error properly
+        .map(|res| res.unwrap())
+        .enumerate();
+
+
+        for _ in 0..4 {
+            let (index, byte) = content_iter.next().ok_or(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()))?;
+            if byte != "XDF:".as_bytes()[index] {
+                return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
+            }
+        }
+
+    // if content_iter.next() != "XDF:".as_bytes() {
+    //     return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
+    // }
 
     while let Some(num_length_bytes) = content_iter.next() {
         let mut chunk_length: u64;
         match num_length_bytes.1 {
-            1 => chunk_length = *content_iter.next().unwrap().1 as u64,
+            1 => chunk_length = content_iter.next().unwrap().1 as u64,
             4 | 8 => {
-                let mut bytes: Vec<u8> = vec![0; *num_length_bytes.1 as usize];
+                let mut bytes: Vec<u8> = vec![0; num_length_bytes.1 as usize];
                 for i in 0..bytes.len() {
                     if let Some(next_byte) = content_iter.next() {
-                        bytes[i] = *next_byte.1;
+                        bytes[i] = next_byte.1;
                     } else {
                         return Err(ReadChunkError::ParseError(EARLY_EOF.to_string()));
                     }
@@ -136,7 +154,7 @@ pub fn read_file_to_raw_chunks<P: AsRef<Path>>(path: P) -> Result<Vec<RawChunk>,
         for i in 0..chunk_length {
             chunk_bytes[i] = {
                 match content_iter.next() {
-                    Some(val) => *val.1,
+                    Some(val) => val.1,
                     None => return Err(ReadChunkError::ParseError(EARLY_EOF.to_string())),
                 }
             };
@@ -167,12 +185,27 @@ pub enum Chunk {
 pub enum ParseChunkError {
     #[error(transparent)]
     XMLParseError(#[from] xmltree::ParseError),
+
     #[error("The XML tag {0} either does not exist or contains invalid or no data")]
-    MissingElementError(String),
+    BadElementError(String),
+
     #[error("Version {0} is not supported")]
     VersionNotSupportedError(f32),
-    #[error("Other error. Reason: {0}")]
-    Other(String),
+
+    #[error(transparent)]
+    Utf8Error(#[from] io::Error),
+
+    #[error("Invalid chunk bytes. Reason: {msg:?}\nin chunk: {raw_chunk:#?}\nat content byte offset: {offset:?}")]
+    InvalidChunkBytesError {
+        msg: String,
+        raw_chunk: RawChunk,
+        offset: usize,
+    },
+
+    #[error("Could not find stream header chunk for stream id {stream_id:?}. File is either invalid or the chunks are somehow out of order, as file and stream headers must be at the beginning of the file.")]
+    MissingHeaderError { stream_id: u32 },
+    // #[error("Other error. Reason: {0}")]
+    // Other(String),
 }
 
 fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
@@ -180,7 +213,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
         Some(child) => child,
 
         //XML does not contain the tag "version"
-        None => return Err(ParseChunkError::MissingElementError("version".to_string())),
+        None => return Err(ParseChunkError::BadElementError("version".to_string())),
     };
 
     let version_str = {
@@ -188,7 +221,7 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
             Some(val) => val,
 
             //the version tag exists but it is empty
-            None => return Err(ParseChunkError::MissingElementError("version".to_string())),
+            None => return Err(ParseChunkError::BadElementError("version".to_string())),
         }
     };
 
@@ -196,10 +229,9 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
         match version_str.parse::<f32>() {
             Ok(t) => t,
 
-            //TODO improve this error handling
             //the version text could not be parsed into a float
             Err(e) => {
-                return Err(ParseChunkError::MissingElementError("version".to_string()));
+                return Err(ParseChunkError::BadElementError("version".to_string()));
             }
         }
     };
@@ -214,9 +246,9 @@ fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
 fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, ParseChunkError> {
     Ok(root
         .get_child(child_name)
-        .ok_or(ParseChunkError::MissingElementError(child_name.to_string()))?
+        .ok_or(ParseChunkError::BadElementError(child_name.to_string()))?
         .get_text()
-        .ok_or(ParseChunkError::MissingElementError(child_name.to_string()))?
+        .ok_or(ParseChunkError::BadElementError(child_name.to_string()))?
         .to_string())
 }
 
@@ -265,10 +297,10 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     name: get_text_from_child(&root, "name")?,
                     r#type: get_text_from_child(&root, "type")?,
                     channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
-                        ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
+                        ParseChunkError::BadElementError(format!("Error while parsing channel count: {}", err))
                     })?,
                     nominal_srate: Some(get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
-                        ParseChunkError::MissingElementError(format!("Error while parsing channel count: {}", err))
+                        ParseChunkError::BadElementError(format!("Error while parsing channel count: {}", err))
                     })?),
                     channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
                         "in8" => Format::Int8,
@@ -279,15 +311,15 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                         "float64" => Format::Float64,
                         "string" => Format::String,
                         invalid => {
-                            return Err(ParseChunkError::MissingElementError(format!(
+                            return Err(ParseChunkError::BadElementError(format!(
                                 "Invalid stream format \"{}\"",
                                 invalid
                             )))
                         }
                     },
                     created_at: get_text_from_child(&root, "created_at")?.parse().map_err(|err| {
-                        ParseChunkError::MissingElementError(format!(
-                            "Error while parsing creation date (as f64): {}",
+                        ParseChunkError::BadElementError(format!(
+                            "Error while parsing creation date string into f64: {}",
                             err
                         ))
                     })?,
@@ -313,10 +345,14 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 match num_samples_byte_num {
                     1 | 4 | 8 => (),
                     _ => {
-                        return Err(ParseChunkError::Other(format!(
-                            "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
-                            num_samples_byte_num
-                        )))
+                        return Err(ParseChunkError::InvalidChunkBytesError {
+                            msg: format!(
+                                "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
+                                num_samples_byte_num
+                            ),
+                            raw_chunk,
+                            offset: 4,
+                        })
                     }
                 }
 
@@ -344,7 +380,9 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                 //for none of them but the spec technically allows for other stuff
                 //ffs
 
-                let stream_info = stream_info_map.get(&stream_id).ok_or(ParseChunkError::Other(format!("Chunks in file are out of order or otherwise invalid: could not find stream header chunk for stream id {}", stream_id)))?;
+                let stream_info = stream_info_map
+                    .get(&stream_id)
+                    .ok_or(ParseChunkError::MissingHeaderError { stream_id })?;
 
                 //option here because string doesn't have a constant size
                 let type_size: Option<i32> = match stream_info.channel_format {
@@ -407,20 +445,18 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                                 num_length_bytes,
                             ),
                             _ => {
-                                println!("Error: Number of length bytes for this value are invalid. Expected either 4 or 8 but got {}", num_length_bytes);
-                                println!("num_length_bytes: {}", num_length_bytes);
-                                println!("offset: {}", offset);
-                                println!("Chunk bytes len: {}", &raw_chunk.content_bytes.len());
-                                println!("Chunk bytes:\n{:?}", &raw_chunk.content_bytes);
-                                panic!();
-                            } //TODO error properly
+                                let msg = format!("Error: Number of length bytes for this value are invalid. Expected 1, 4 or 8 but got {}", num_length_bytes);
+                                return Err(ParseChunkError::InvalidChunkBytesError { msg, raw_chunk, offset });
+                            }
                         } as usize;
                         offset += num_length_bytes; // for length field
                         let mut value_bytes = &raw_chunk.content_bytes[offset..(offset + value_length)];
 
-                        //TODO what in the cursed and why
+                        // Turn the bytes into a valid utf-8 string
                         let mut value_string = String::new();
-                        value_bytes.read_to_string(&mut value_string); //TODO handle utf8 err
+                        if let Err(err) = value_bytes.read_to_string(&mut value_string) {
+                            return Err(ParseChunkError::Utf8Error(err));
+                        };
 
                         println!("String value: {}", &value_string);
                         let value = Value::String(value_string);
@@ -500,15 +536,13 @@ pub fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> Result<Vec<Chunk>, Par
                     None => None,
                 };
 
-                
-
                 // get_text_from_child(&root, "measured_srate")?.parse();
 
                 let info = StreamFooterChunkInfo {
                     first_timestamp,
                     last_timestamp,
                     sample_count: get_text_from_child(&root, "sample_count")?.parse().map_err(|err| {
-                        ParseChunkError::MissingElementError(format!("Error while parsing sample count: {}", err))
+                        ParseChunkError::BadElementError(format!("Error while parsing sample count: {}", err))
                     })?,
                     measured_srate,
                 };
@@ -533,7 +567,7 @@ fn opt_string_to_f64(opt_string: Option<String>) -> Result<Option<f64>, ParseChu
             let val_res = val_str.parse::<f64>();
             match val_res {
                 Ok(val) => Ok(Some(val)),
-                Err(err) => Err(ParseChunkError::MissingElementError(format!(
+                Err(err) => Err(ParseChunkError::BadElementError(format!(
                     "Error while parsing {}: {}",
                     val_str, err
                 ))),
