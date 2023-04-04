@@ -38,21 +38,10 @@ pub const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
 pub const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
 pub const EARLY_EOF: &str = "Reached EOF early";
 
-// TODO: accept iterator/reader instead of path
 pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, ReadChunkError> {
-    // let file_bytes = match fs::read(path) {
-    //     Ok(bytes) => bytes,
-    //     Err(err) => return Err(ReadChunkError::IOError(err)),
-    // };
-
-    // if file_bytes.len() < "XDF:".len() {
-    //     return Err(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()));
-    // }
-
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
-    // let mut content_iter = file_bytes.iter().enumerate().peekable().skip("XDF:".len());
     let mut content_iter = reader
         .bytes()
         .peekable()
@@ -60,17 +49,14 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
         .map(|res| res.unwrap())
         .enumerate();
 
-
-        for _ in 0..4 {
-            let (index, byte) = content_iter.next().ok_or(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()))?;
-            if byte != "XDF:".as_bytes()[index] {
-                return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
-            }
+    for _ in 0..4 {
+        let (index, byte) = content_iter
+            .next()
+            .ok_or(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()))?;
+        if byte != "XDF:".as_bytes()[index] {
+            return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
         }
-
-    // if content_iter.next() != "XDF:".as_bytes() {
-    //     return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
-    // }
+    }
 
     while let Some(num_length_bytes) = content_iter.next() {
         let mut chunk_length: u64;
