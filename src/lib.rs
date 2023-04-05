@@ -29,15 +29,20 @@ pub enum ReadChunkError {
     #[error("Could not parse file: {0}")]
     ParseError(String),
 
+    #[error("File is too short, reached EOF unexpectedly")]
+    EOFError,
+
+    #[error("File does not begin with magic number")]
+    NoMagicNumberError,
+
+    #[error("Invalid tag. Expected 1 to 6 inclusive but was {0}")]
+    InvalidTagError(u16),
+
     #[error(transparent)]
     IOError(#[from] io::Error),
 }
 
-// TODO: turn these into enum variants of ReadChunkError
-pub const FILE_TOO_SHORT_MSG: &str = "File is too short to be valid";
-pub const NO_MAGIC_NUMBER_MSG: &str = "File does not begin with magic number";
-pub const EARLY_EOF: &str = "Reached EOF early";
-
+// TODO docs :')
 pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, ReadChunkError> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
@@ -45,16 +50,16 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
     let mut content_iter = reader
         .bytes()
         .peekable()
-        // TODO remove this unwrap, error properly
+        // TODO remove this unwrap, error properly? Or is this fine due to lazy evaluation?
         .map(|res| res.unwrap())
         .enumerate();
 
     for _ in 0..4 {
         let (index, byte) = content_iter
             .next()
-            .ok_or(ReadChunkError::ParseError(FILE_TOO_SHORT_MSG.to_string()))?;
+            .ok_or(ReadChunkError::EOFError)?;
         if byte != "XDF:".as_bytes()[index] {
-            return Err(ReadChunkError::ParseError(NO_MAGIC_NUMBER_MSG.to_string()));
+            return Err(ReadChunkError::NoMagicNumberError);
         }
     }
 
@@ -68,7 +73,7 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
                     if let Some(next_byte) = content_iter.next() {
                         bytes[i] = next_byte.1;
                     } else {
-                        return Err(ReadChunkError::ParseError(EARLY_EOF.to_string()));
+                        return Err(ReadChunkError::EOFError);
                     }
                 }
 
@@ -93,7 +98,7 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
                 let val = content_iter.next();
                 match val {
                     Some(val) => val.1,
-                    None => return Err(ReadChunkError::ParseError(EARLY_EOF.to_string())),
+                    None => return Err(ReadChunkError::EOFError),
                 }
             }
             .clone();
@@ -115,10 +120,7 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
             5 => Tag::Boundary,
             6 => Tag::StreamFooter,
             _ => {
-                return Err(ReadChunkError::ParseError(format!(
-                    "Invalid tag. Expected 1 to 6 inclusive but was {}",
-                    chunk_tag_num
-                )))
+                return Err(ReadChunkError::InvalidTagError(chunk_tag_num))
             }
         };
 
@@ -141,7 +143,7 @@ pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, Read
             chunk_bytes[i] = {
                 match content_iter.next() {
                     Some(val) => val.1,
-                    None => return Err(ReadChunkError::ParseError(EARLY_EOF.to_string())),
+                    None => return Err(ReadChunkError::EOFError),
                 }
             };
         }
