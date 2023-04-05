@@ -43,7 +43,7 @@ pub enum ReadChunkError {
 }
 
 // TODO docs :')
-pub fn read_file_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, ReadChunkError> {
+pub fn read_to_raw_chunks<R: Read>(reader: R) -> Result<Vec<RawChunk>, ReadChunkError> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 

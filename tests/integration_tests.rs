@@ -1,5 +1,5 @@
 use assert_fs::{prelude::*, TempDir};
-use xdf::{read_file_to_raw_chunks, ReadChunkError};
+use xdf::{read_to_raw_chunks, ReadChunkError};
 use std::fs;
 
 // #[test]
@@ -17,7 +17,7 @@ fn empty_file() {
     //reader from path:
     let reader = fs::File::open(empty_file.path()).unwrap();
 
-    let res = read_file_to_raw_chunks(reader);
+    let res = read_to_raw_chunks(reader);
     assert!(matches!(res.unwrap_err(), ReadChunkError::EOFError));
 }
 
@@ -31,12 +31,12 @@ fn no_magic_number() {
     //reader from path:
     let reader = fs::File::open(no_magic_file.path()).unwrap();
 
-    let res = read_file_to_raw_chunks(reader);
+    let res = read_to_raw_chunks(reader);
     assert!(matches!(res.unwrap_err(), ReadChunkError::NoMagicNumberError));
 }
 
 #[test]
 fn invalid_tag() {
     let bytes:Vec<u8> = vec![1, 3, 0, 0, 10];
-    let res = read_file_to_raw_chunks(bytes.as_slice());
+    let res = read_to_raw_chunks(bytes.as_slice());
 }
