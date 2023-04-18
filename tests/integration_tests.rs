@@ -1,6 +1,6 @@
 use assert_fs::{prelude::*, TempDir};
-use xdf::{read_to_raw_chunks, ReadChunkError};
 use std::fs;
+use xdf::{read_to_raw_chunks, ReadChunkError};
 
 // #[test]
 // fn invalid_path() {
@@ -10,33 +10,36 @@ use std::fs;
 
 #[test]
 fn empty_file() {
-    let temp_dir = TempDir::new().unwrap();
-    let empty_file = temp_dir.child("empty.xdf");
-    empty_file.touch().unwrap();
+    let bytes: Vec<u8> = vec![];
+    let res = read_to_raw_chunks(bytes.as_slice());
+    assert!(matches!(res.unwrap_err(), ReadChunkError::EOFError));
+}
 
-    //reader from path:
-    let reader = fs::File::open(empty_file.path()).unwrap();
-
-    let res = read_to_raw_chunks(reader);
+#[test]
+fn too_short_file() {
+    let bytes: Vec<u8> = vec![b'X'];
+    let res = read_to_raw_chunks(bytes.as_slice());
     assert!(matches!(res.unwrap_err(), ReadChunkError::EOFError));
 }
 
 #[test]
 fn no_magic_number() {
-    let temp_dir = TempDir::new().unwrap();
-    let no_magic_file = temp_dir.child("no_magic.xdf");
-    no_magic_file.touch().unwrap();
-    no_magic_file.write_str("NOT: a magic number").unwrap();
-
-    //reader from path:
-    let reader = fs::File::open(no_magic_file.path()).unwrap();
-
-    let res = read_to_raw_chunks(reader);
+    let bytes: Vec<u8> = vec![b'X', b'D', b'A', b':'];
+    let res = read_to_raw_chunks(bytes.as_slice());
     assert!(matches!(res.unwrap_err(), ReadChunkError::NoMagicNumberError));
 }
 
 #[test]
-fn invalid_tag() {
-    let bytes:Vec<u8> = vec![1, 3, 0, 0, 10];
+fn invalid_tags() {
+    //tag 0 is invalid
+    let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 0, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
+    assert!(matches!(res.unwrap_err(), ReadChunkError::InvalidTagError(s) if s == 0));
+
+    //tag 7 is invalid
+    let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 7, 0, 10];
+    let res = read_to_raw_chunks(bytes.as_slice());
+    assert!(matches!(res.unwrap_err(), ReadChunkError::InvalidTagError(s) if s == 7));
 }
+
+
