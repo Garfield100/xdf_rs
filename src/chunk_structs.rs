@@ -6,6 +6,23 @@ pub struct FileHeaderChunk {
     pub xml: Element,
 }
 
+#[test]
+fn file_header_chunk(){
+    use crate::{read_to_raw_chunks};
+
+    let start_bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 0x3A, 1, 0];
+    let xml_string = r#"<?xml version="1.0"?><info><version>1.0</version></info>"#;
+    let bytes:Vec<u8> = [start_bytes, xml_string.as_bytes().to_vec()].concat();
+
+    let res = read_to_raw_chunks(bytes.as_slice());
+
+    let chunks = res.unwrap();
+
+    assert_eq!(chunks.len(), 1);
+    assert!(matches!(chunks[0].tag, Tag::FileHeader));
+    assert_eq!(chunks[0].content_bytes.len(), 56);
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Format {
     Int8,
