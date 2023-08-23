@@ -1,6 +1,6 @@
 //! Errors that can occur when parsing a chunk
 
-use crate::chunk_structs::RawChunk;
+
 use error_chain::error_chain;
 use std::io::{self};
 use thiserror::Error;

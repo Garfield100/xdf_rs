@@ -25,7 +25,7 @@ pub(crate) fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
             Ok(t) => t,
 
             //the version text could not be parsed into a float
-            Err(e) => {
+            Err(_e) => {
                 return Err(ParseChunkError::BadElementError("version".to_string()));
             }
         }

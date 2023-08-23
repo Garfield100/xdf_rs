@@ -16,7 +16,7 @@
 // use thiserror::Error;
 // use xmltree::Element;
 
-use std::io::{self, Read};
+use std::io::{Read};
 
 mod chunk_structs;
 mod errors;
@@ -28,7 +28,7 @@ use raw_chunks::*;
 use streams::Stream;
 
 // use crate::chunk_structs::*;
-use crate::{chunk_structs::Chunk, util::*};
+use crate::{chunk_structs::Chunk};
 
 // xdf file struct
 #[derive(Debug)]

@@ -9,7 +9,7 @@ use std::{collections::HashMap, io::Read};
 
 use crate::{
     chunk_structs::*,
-    errors::{self, Error, ParseChunkError, ReadChunkError},
+    errors::{self, ParseChunkError, ReadChunkError},
     util::{extract_timestamp, get_text_from_child, opt_string_to_f64, parse_version},
 };
 
