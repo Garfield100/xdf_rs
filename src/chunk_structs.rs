@@ -1,18 +1,32 @@
 use xmltree::Element;
 
 #[derive(Debug)]
-pub struct FileHeaderChunk {
+pub(crate) enum Chunk {
+    FileHeaderChunk(FileHeaderChunk),
+    StreamHeaderChunk(StreamHeaderChunk),
+    SamplesChunk(SamplesChunk),
+    ClockOffsetChunk(ClockOffsetChunk),
+    BoundaryChunk(BoundaryChunk),
+    StreamFooterChunk(StreamFooterChunk),
+}
+
+#[derive(Debug)]
+#[doc = "The FileHeaderChunk is the first chunk in an XDF file. It contains the version of the XDF file format and an XML element that contains additional information about the file."]
+#[doc = "There must be exactly one FileHeaderChunk in an XDF file."]
+pub(crate) struct FileHeaderChunk {
+    /// The version of the XDF file format. Currently, only version 1.0 is supported.
     pub version: f32,
+    /// The root of an XML element that contains additional information about the file.
     pub xml: Element,
 }
 
 #[test]
-fn file_header_chunk(){
-    use crate::{read_to_raw_chunks};
+fn file_header_chunk() {
+    use crate::raw_chunks::read_to_raw_chunks;
 
     let start_bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 0x3A, 1, 0];
     let xml_string = r#"<?xml version="1.0"?><info><version>1.0</version></info>"#;
-    let bytes:Vec<u8> = [start_bytes, xml_string.as_bytes().to_vec()].concat();
+    let bytes: Vec<u8> = [start_bytes, xml_string.as_bytes().to_vec()].concat();
 
     let res = read_to_raw_chunks(bytes.as_slice());
 
@@ -24,7 +38,7 @@ fn file_header_chunk(){
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Format {
+pub(crate) enum Format {
     Int8,
     Int16,
     Int32,
@@ -54,7 +68,7 @@ pub enum Value {
 // I have decided to go with the more minimal of the two so as not to error on
 // the most minimal.
 #[derive(Debug, Clone)]
-pub struct StreamHeaderChunkInfo {
+pub(crate) struct StreamHeaderChunkInfo {
     pub name: String,
     pub r#type: String, // "type" is obviously a reserved keyword but can be escaped using r#
     pub channel_count: u32,
@@ -70,7 +84,7 @@ pub struct StreamHeaderChunkInfo {
 }
 
 #[derive(Debug)]
-pub struct StreamHeaderChunk {
+pub(crate) struct StreamHeaderChunk {
     pub stream_id: u32,
     pub info: StreamHeaderChunkInfo,
     pub xml: Element,
@@ -83,27 +97,27 @@ pub struct Sample {
 }
 
 #[derive(Debug)]
-pub struct SamplesChunk {
+pub(crate) struct SamplesChunk {
     pub stream_id: u32,
     pub samples: Vec<Sample>,
 }
 
 //collection_time and offset_value are in seconds
 #[derive(Debug)]
-pub struct ClockOffsetChunk {
+pub(crate) struct ClockOffsetChunk {
     pub stream_id: u32,
     pub collection_time: f64,
     pub offset_value: f64,
 }
 
 #[derive(Debug)]
-pub struct BoundaryChunk {}
+pub(crate) struct BoundaryChunk {}
 
 //TODO: check what fields are and are not really mandatory
 //If we don't have first or last timestamps given, is it ok if we instead
 //determine those ourselves?
 #[derive(Debug)]
-pub struct StreamFooterChunkInfo {
+pub(crate) struct StreamFooterChunkInfo {
     pub first_timestamp: Option<f64>,
     pub last_timestamp: Option<f64>,
     pub sample_count: u64,
@@ -111,14 +125,14 @@ pub struct StreamFooterChunkInfo {
 }
 
 #[derive(Debug)]
-pub struct StreamFooterChunk {
+pub(crate) struct StreamFooterChunk {
     pub stream_id: u32,
     pub info: StreamFooterChunkInfo,
     pub xml: Element,
 }
 
 #[derive(Debug)]
-pub enum Tag {
+pub(crate) enum Tag {
     FileHeader,
     StreamHeader,
     Samples,
@@ -129,7 +143,7 @@ pub enum Tag {
 
 // TODO: ensure correct visibility
 #[derive(Debug)]
-pub struct RawChunk {
+pub(crate) struct RawChunk {
     pub tag: Tag,
     pub content_bytes: Vec<u8>,
 }
