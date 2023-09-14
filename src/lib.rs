@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(nonstandard_style)]
 #![warn(array_into_iter)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![crate_type = "lib"]
 
 //! Read XDF files
@@ -16,7 +16,7 @@
 // use thiserror::Error;
 // use xmltree::Element;
 
-use std::io::{Read};
+use std::{io::Read, collections::HashMap};
 
 mod chunk_structs;
 mod errors;
@@ -28,13 +28,42 @@ use raw_chunks::*;
 use streams::Stream;
 
 // use crate::chunk_structs::*;
-use crate::{chunk_structs::Chunk};
+use crate::chunk_structs::Chunk;
 
 // xdf file struct
 #[derive(Debug)]
 pub struct XDFFile {
     pub header: xmltree::Element,
-    pub streams: Vec<Stream>,
+    pub streams: HashMap<u32, Stream>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Format {
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Float32,
+    Float64,
+    String,
+}
+
+//This is a little annoying. Do I remove the channel_format and Fomat struct
+//above entirely and just use the type of the sample's vector elements?
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub enum Value {
+    Int8(i8),
+    Int16(i16),
+    Int32(i32),
+    Int64(i64),
+    Float32(f32),
+    Float64(f64),
+    String(String),
+}
+#[derive(Debug, PartialEq, Clone)]
+pub struct Sample {
+    pub timestamp: Option<f64>,
+    pub values: Vec<Value>,
 }
 
 impl XDFFile {
