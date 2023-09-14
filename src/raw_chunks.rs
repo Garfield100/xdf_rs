@@ -1,19 +1,21 @@
 use byteorder::{ByteOrder, LittleEndian};
 use xmltree::Element;
 
-use std::{collections::HashMap, io::Read};
-
-// #[path ="chunk_structs.rs"]
-// mod chunk_structs;
-// use chunk_structs::*;
+use std::{
+    collections::HashMap,
+    io::{BufReader, Read},
+};
 
 use crate::{
     chunk_structs::*,
     errors::{self, ParseChunkError, ReadChunkError},
     util::{extract_timestamp, get_text_from_child, opt_string_to_f64, parse_version},
+    Format, Sample, Value,
 };
 
 pub(crate) fn read_to_raw_chunks<R: Read>(reader: R) -> errors::Result<Vec<RawChunk>> {
+    let reader = BufReader::new(reader);
+
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
@@ -145,7 +147,6 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
         //chunk content bytes are longer than 4 bytes anyway.
         let id_bytes = &raw_chunk.content_bytes[..4];
         let stream_id: u32 = LittleEndian::read_u32(id_bytes);
-        println!("{:?}", raw_chunk.tag);
         match raw_chunk.tag {
             Tag::FileHeader => {
                 let root = {
@@ -180,8 +181,8 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
                 };
 
                 let info = StreamHeaderChunkInfo {
-                    name: get_text_from_child(&root, "name")?,
-                    r#type: get_text_from_child(&root, "type")?,
+                    name: Some(get_text_from_child(&root, "name")?),
+                    r#type: Some(get_text_from_child(&root, "type")?),
                     channel_count: get_text_from_child(&root, "channel_count")?.parse().map_err(|err| {
                         ParseChunkError::BadElementError(format!("Error while parsing channel count: {}", err))
                     })?,
@@ -204,12 +205,6 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
                             .into())
                         }
                     },
-                    created_at: get_text_from_child(&root, "created_at")?.parse().map_err(|err| {
-                        ParseChunkError::BadElementError(format!(
-                            "Error while parsing creation date string into f64: {}",
-                            err
-                        ))
-                    })?,
                     desc: match root.get_child("desc") {
                         Some(desc) => Some(desc.clone()),
                         None => None,
@@ -322,7 +317,6 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
                             offset += type_size as usize;
                         }
 
-                        println!("Values: {:?}", &values);
                         samples.push(Sample { timestamp, values });
                     }
                 } else {
@@ -356,7 +350,6 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
                             return Err(ParseChunkError::Utf8Error(err).into());
                         };
 
-                        println!("String value: {}", &value_string);
                         let value = Value::String(value_string);
                         let mut value_vec = Vec::with_capacity(1);
                         value_vec.push(value); // we need to put this into a vec with one element due to how the sample struct
@@ -466,17 +459,17 @@ fn empty_file() {
     let res = read_to_raw_chunks(bytes.as_slice());
     assert!(matches!(
         res.unwrap_err(),
-        Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
+        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
     ));
 }
 
 #[test]
-fn too_short_file() {
+fn file_too_short() {
     let bytes: Vec<u8> = vec![b'X'];
     let res = read_to_raw_chunks(bytes.as_slice());
     assert!(matches!(
         res.unwrap_err(),
-        Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
+        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
     ));
 }
 
@@ -486,7 +479,7 @@ fn no_magic_number() {
     let res = read_to_raw_chunks(bytes.as_slice());
     assert!(matches!(
         res.unwrap_err(),
-        Error(errors::ErrorKind::ReadChunkError(ReadChunkError::NoMagicNumberError), _)
+        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::NoMagicNumberError), _)
     ));
 }
 
@@ -496,13 +489,13 @@ fn invalid_tags() {
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 0, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
     assert!(
-        matches!(res.unwrap_err(), Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 0)
+        matches!(res.unwrap_err(), errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 0)
     );
 
     //tag 7 is invalid
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 7, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
     assert!(
-        matches!(res.unwrap_err(), Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 7)
+        matches!(res.unwrap_err(), errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 7)
     );
 }
