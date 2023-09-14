@@ -1,3 +1,5 @@
 /target
 /.vscode
 /xdf.wiki
+/perf.data*
+/flamegraph.svg
