@@ -31,10 +31,6 @@ pub(crate) fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
         }
     };
 
-    if version != 1.0 {
-        return Err(ParseChunkError::VersionNotSupportedError(version));
-    }
-
     return Ok(version);
 }
 
@@ -73,6 +69,7 @@ pub(crate) fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Opt
         *offset += 9;
     } else {
         //no timestamp
+        debug_assert_eq!(raw_chunk.content_bytes[*offset], 0);
         timestamp = None;
         *offset += 1;
     }

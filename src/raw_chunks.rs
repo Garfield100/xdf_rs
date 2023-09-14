@@ -154,10 +154,17 @@ pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<
                         Err(err) => return Err(ParseChunkError::XMLParseError(err).into()),
                     }
                 };
-                chunks.push(Chunk::FileHeaderChunk(FileHeaderChunk {
+
+                let file_header_chunk = FileHeaderChunk {
                     version: parse_version(&root)?,
                     xml: root,
-                }));
+                };
+
+                if file_header_chunk.version != 1.0 {
+                    return Err(ParseChunkError::VersionNotSupportedError(file_header_chunk.version).into());
+                }
+
+                chunks.push(Chunk::FileHeaderChunk(file_header_chunk));
             }
 
             Tag::StreamHeader => {
