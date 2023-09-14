@@ -76,3 +76,30 @@ pub(crate) fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Opt
 
     return timestamp;
 }
+
+#[test]
+fn test_extract_timestamp_none() {
+    let mut offset = 0;
+    let raw_chunk = RawChunk {
+        tag: crate::chunk_structs::Tag::StreamHeader,
+        content_bytes: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+    };
+
+    let timestamp = extract_timestamp(&raw_chunk, &mut offset);
+    assert_eq!(timestamp, None);
+    assert_eq!(offset, 1);
+}
+
+#[test]
+fn test_extract_timestamp_some(){
+    let mut offset = 0;
+    let raw_chunk = RawChunk {
+        tag: crate::chunk_structs::Tag::StreamHeader,
+        //5.1 = 0x 40 14 66 66 66 66 66 66
+        content_bytes: vec![8, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x14, 0x40],
+    };
+
+    let timestamp = extract_timestamp(&raw_chunk, &mut offset);
+    assert_eq!(timestamp, Some(5.09999999999999964472863211995_f64));
+    assert_eq!(offset, 9);
+}
