@@ -95,11 +95,31 @@ pub(crate) fn chunks_to_streams(chunks: Vec<Chunk>) -> Result<HashMap<u32, Strea
             None
         };
 
+        let mut most_recent_timestamp = None;
         let samples_vec = samples_chunks_map
             .entry(stream_id)
             .or_insert(Vec::new())
             .into_iter()
             .flat_map(|c| c.samples.clone())
+            .enumerate()
+            .map(|(i, s)| {
+                if let Some(srate) = stream_header.info.nominal_srate {
+                    let timestamp = if let Some(timestamp) = s.timestamp {
+                        most_recent_timestamp = Some((i, timestamp));
+                        s.timestamp
+                    } else {
+                        let (old_i, old_timestamp) = most_recent_timestamp.unwrap();
+                        Some(old_timestamp + ((i - old_i) as f64 / srate))
+                    };
+
+                    Sample {
+                        timestamp,
+                        values: s.values,
+                    }
+                } else {
+                    s
+                }
+            })
             .collect();
         // let samples: &[Sample] = &samples_vec;
 

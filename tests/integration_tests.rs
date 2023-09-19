@@ -2,6 +2,8 @@ use std::{fs, path::PathBuf};
 
 use xdf::{Format, Value, XDFFile};
 
+const EPSILON: f64 = 0.000000000000001;
+
 #[test]
 fn read_minimal_xdf() {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -63,19 +65,52 @@ fn read_minimal_xdf() {
         },
     ];
 
-    assert_eq!(first_stream.samples.len(), expected_first_samples.len(), "unexpected number of samples in first stream");
-    assert!(match first_stream.format {
-        Format::Int16 => true,
-        _ => false,
-    }, "unexpected format of first stream");
+    assert_eq!(
+        first_stream.samples.len(),
+        expected_first_samples.len(),
+        "unexpected number of samples in first stream"
+    );
+    assert!(
+        match first_stream.format {
+            Format::Int16 => true,
+            _ => false,
+        },
+        "unexpected format of first stream"
+    );
 
-    
     // compare only values
-    assert_eq!(expected_first_samples.iter().map(|s| s.values.clone()).collect::<Vec<Vec<Value>>>(), first_stream.samples.iter().map(|s| s.values.clone()).collect::<Vec<Vec<Value>>>(), "first stream values are not as expected");
-    
-    //then everything
-    assert_eq!(expected_first_samples, first_stream.samples, "first stream samples (values and/or timestamps) are not as expected");
+    assert_eq!(
+        expected_first_samples
+            .iter()
+            .map(|s| s.values.clone())
+            .collect::<Vec<Vec<Value>>>(),
+        first_stream
+            .samples
+            .iter()
+            .map(|s| s.values.clone())
+            .collect::<Vec<Vec<Value>>>(),
+        "first stream values are not as expected"
+    );
+
+    //then the timestamps. we have to loop because we need an epsilon to compare the reconstructed timestamps using an epsilon
+    for (i, (actual_sample, expected_sample)) in
+        Iterator::zip(first_stream.samples.iter(), expected_first_samples.iter()).enumerate()
+    {
+        assert!(
+            actual_sample.timestamp.is_some(),
+            "timestamp of sample {} in first stream is None, expected {:?}",
+            i,
+            expected_sample.timestamp
+        );
+        assert!(
+            (actual_sample.timestamp.unwrap() - expected_sample.timestamp.unwrap()).abs() < EPSILON,
+            "timestamp of sample {} in first stream was {}, expected {} to be within {} of it",
+            i,
+            actual_sample.timestamp.unwrap(),
+            expected_sample.timestamp.unwrap(),
+            EPSILON
+        );
+    }
 
     // TODO test second stream
-
 }
