@@ -8,8 +8,8 @@ const EPSILON: f64 = 0.000000000000001;
 fn read_minimal_xdf() {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     file_path.push("example-files/minimal.xdf");
-    let reader = fs::File::open(file_path).unwrap();
-    let xdf_file = XDFFile::from_reader(reader).unwrap();
+    let bytes = fs::read(file_path).unwrap();
+    let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
     //must be sorted
     let stream_ids: [u32; 2] = [0, 0x02C0FFEE];

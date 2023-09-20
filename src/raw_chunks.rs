@@ -13,18 +13,11 @@ use crate::{
     Format, Sample, Value,
 };
 
-pub(crate) fn read_to_raw_chunks<R: Read>(reader: R) -> errors::Result<Vec<RawChunk>> {
-    let reader = BufReader::new(reader);
-
+pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChunk>> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
-    let mut content_iter = reader
-        .bytes()
-        .peekable()
-        // TODO remove this unwrap, error properly? Or is this fine due to lazy evaluation?
-        .map(|res| res.unwrap())
-        .enumerate();
+    let mut content_iter = file_bytes.into_iter().map(|b| *b).enumerate();
 
     for _ in 0..4 {
         let (index, byte) = content_iter.next().ok_or(ReadChunkError::EOFError)?;

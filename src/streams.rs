@@ -95,6 +95,9 @@ pub(crate) fn chunks_to_streams(chunks: Vec<Chunk>) -> Result<HashMap<u32, Strea
             None
         };
 
+
+        // TODO should this work backwards too? Also think of edge cases.
+        // deduce timestamps if not present but nominal_srate is specified.
         let mut most_recent_timestamp = None;
         let samples_vec = samples_chunks_map
             .entry(stream_id)

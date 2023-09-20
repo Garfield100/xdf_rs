@@ -16,7 +16,7 @@
 // use thiserror::Error;
 // use xmltree::Element;
 
-use std::{io::Read, collections::HashMap};
+use std::{collections::HashMap, io::Read};
 
 mod chunk_structs;
 mod errors;
@@ -67,8 +67,8 @@ pub struct Sample {
 }
 
 impl XDFFile {
-    pub fn from_reader<R: Read>(reader: R) -> Result<Self, crate::errors::Error> {
-        let raw_chunks = read_to_raw_chunks(reader)?;
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::errors::Error> {
+        let raw_chunks = read_to_raw_chunks(bytes)?;
         let chunks = raw_chunks_to_chunks(raw_chunks)?;
         let header_xml: xmltree::Element = chunks
             .iter()
