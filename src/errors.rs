@@ -1,6 +1,4 @@
 //! Errors that can occur when parsing a chunk
-
-
 use error_chain::error_chain;
 use std::io::{self};
 use thiserror::Error;
@@ -77,6 +75,7 @@ error_chain! {
     foreign_links {
         ParseChunkError(ParseChunkError);
         ReadChunkError(ReadChunkError);
+        TryFromSliceError(std::array::TryFromSliceError);
     }
 
     errors {

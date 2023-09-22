@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+// #![forbid(unsafe_code)]
 #![deny(nonstandard_style)]
 #![warn(array_into_iter)]
 // #![warn(missing_docs)]
@@ -11,12 +11,8 @@
 //! [`XDF files`]: https://github.com/sccn/xdf/wiki/Specifications
 
 // TODO remove unused imports
-// use byteorder::{ByteOrder, LittleEndian};
-// use errors::ParseChunkError;
-// use thiserror::Error;
-// use xmltree::Element;
 
-use std::{collections::HashMap, io::Read};
+use std::collections::HashMap;
 
 mod chunk_structs;
 mod errors;
