@@ -66,18 +66,16 @@ impl XDFFile {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::errors::Error> {
         let raw_chunks = read_to_raw_chunks(bytes)?;
         let chunks = raw_chunks_to_chunks(raw_chunks)?;
-        let header_xml: xmltree::Element = chunks
-            .iter()
-            .find_map(|c| match c {
-                Chunk::FileHeaderChunk(c) => Some(c.xml.clone()),
-                _ => None,
-            })
-            .ok_or(errors::ErrorKind::MissingFileHeaderChunk)?;
+        let file_header_xml: xmltree::Element = if let Some(Chunk::FileHeaderChunk(c)) = chunks.get(0) {
+            c.xml.clone()
+        } else {
+            return Err(crate::errors::ErrorKind::MissingFileHeaderChunk.into());
+        };
 
         let streams = streams::chunks_to_streams(chunks)?;
 
         Ok(Self {
-            header: header_xml,
+            header: file_header_xml,
             streams,
         })
     }
