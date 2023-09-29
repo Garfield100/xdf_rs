@@ -44,9 +44,23 @@ pub enum Format {
     String,
 }
 
+impl Format {
+    const fn byte_size(self) -> usize{
+        match self {
+            Format::Int8 => 1,
+            Format::Int16 => 2,
+            Format::Int32 => 4,
+            Format::Int64 => 8,
+            Format::Float32 => 4,
+            Format::Float64 => 8,
+            Format::String => panic!("String format has no constant size"),
+        }
+    } 
+}
+
 //This is a little annoying. Do I remove the channel_format and Fomat struct
 //above entirely and just use the type of the sample's vector elements?
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Int8(i8),
     Int16(i16),
@@ -56,7 +70,7 @@ pub enum Value {
     Float64(f64),
     String(String),
 }
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct Sample {
     pub timestamp: Option<f64>,
     pub values: Vec<Value>,
