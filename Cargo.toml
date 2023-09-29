@@ -20,6 +20,7 @@ glassbench = "0.3.5"
 [profile.profiler]
 inherits = "release"
 debug = true
+strip = "none"
 
 [[bench]]
 name = "parse_files"

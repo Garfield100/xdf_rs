@@ -2,6 +2,6 @@
 /.vscode
 /xdf.wiki
 /perf.data*
-/flamegraph.svg
+/flamegraph*.svg
 glassbench_v1.db
 dhat.out.*
