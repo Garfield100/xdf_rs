@@ -28,7 +28,7 @@ fn bench_parse_files(bench: &mut Bench) {
     });
 
     let xdf_006_bytes = std::fs::read("example-files/tmp/xdf_006.xdf").unwrap();
-    bench.task("xdf_009.xdf - 62M", |task| {
+    bench.task("xdf_006.xdf - 62M", |task| {
         task.iter(|| {
             let xdf_data = xdf::XDFFile::from_bytes(xdf_006_bytes.as_slice()).unwrap();
             pretend_used(&xdf_data);
