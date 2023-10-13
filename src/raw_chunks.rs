@@ -124,78 +124,13 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
     return Ok(raw_chunks);
 }
 
-pub(crate) fn raw_chunks_to_chunks(raw_chunks: Vec<RawChunk>) -> errors::Result<Vec<Chunk>> {
-    let mut chunks: Vec<Chunk> = vec![];
-
-    //map channel IDs to format and channel counts from streamheader chunks to
-    //be able to parse sampole chunks
-    let mut stream_info_map = HashMap::<u32, StreamHeaderChunkInfo>::new();
-    let mut stream_num_samples_map = HashMap::<u32, u64>::new();
-
-    for raw_chunk in raw_chunks {
-        //stream IDs are always the first 4 bytes.
-        //if the chunk does not have a stream ID we can just ignore these. All
-        //chunk content bytes are longer than 4 bytes anyway.
-        let id_bytes = &raw_chunk.content_bytes[..4];
-        let stream_id: u32 = LittleEndian::read_u32(id_bytes);
-        match raw_chunk.tag {
-            Tag::FileHeader => {
-                let root = {
-                    match Element::parse(raw_chunk.content_bytes.as_slice()) {
-                        Ok(root) => root,
-                        Err(err) => return Err(ParseChunkError::XMLParseError(err).into()),
-                    }
-                };
-
-                let file_header_chunk = FileHeaderChunk {
-                    version: parse_version(&root)?,
-                    xml: root,
-                };
-
-                if file_header_chunk.version != 1.0 {
-                    return Err(ParseChunkError::VersionNotSupportedError(file_header_chunk.version).into());
-                }
-
-                chunks.push(Chunk::FileHeaderChunk(file_header_chunk));
-            }
-
-            Tag::StreamHeader => parse_stream_header(&raw_chunk, &mut stream_info_map, &mut chunks)?,
-            Tag::Samples => parse_samples(
-                raw_chunk,
-                &mut stream_num_samples_map,
-                stream_id,
-                &stream_info_map,
-                &mut chunks,
-            )?,
-            Tag::ClockOffset => {
-                let collection_time: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[4..12]).try_into()?);
-                let offset_value: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[12..20]).try_into()?);
-
-                let clock_offset_chunk = Chunk::ClockOffsetChunk(ClockOffsetChunk {
-                    stream_id,
-                    collection_time,
-                    offset_value,
-                });
-                chunks.push(clock_offset_chunk);
-            }
-            Tag::Boundary => chunks.push(Chunk::BoundaryChunk(BoundaryChunk {})),
-            Tag::StreamFooter => {
-                parse_stream_footer(raw_chunk, &stream_num_samples_map, &stream_info_map, &mut chunks)?
-            }
-        }
-    }
-
-    return Ok(chunks);
-}
-
 // yes these are ugly, they were extracted by refactoring
 #[inline]
-fn parse_stream_footer(
+pub(crate) fn parse_stream_footer(
     raw_chunk: RawChunk,
     stream_num_samples_map: &HashMap<u32, u64>,
     stream_info_map: &HashMap<u32, StreamHeaderChunkInfo>,
-    chunks: &mut Vec<Chunk>,
-) -> Result<(), errors::Error> {
+) -> Result<Chunk, errors::Error> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
     let root = {
@@ -209,32 +144,30 @@ fn parse_stream_footer(
     let measured_srate_str = get_text_from_child(&root, "measured_srate").ok();
     let first_timestamp = opt_string_to_f64(first_timestamp_str)?;
     let last_timestamp = opt_string_to_f64(last_timestamp_str)?;
-    let measured_srate = opt_string_to_f64(measured_srate_str)?;
-    let measured_srate = if let Some(val) = measured_srate {
-        val
-    } else {
-        // measured_srate is missing, so we calculate it ourselves
-
-        // nominal_srate is given as "a floating point number in Hertz. If the stream
-        // has an irregular sampling rate (that is, the samples are not spaced evenly in
-        // time, for example in an event stream), this value must be 0."
-
-        if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
-            (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
-        {
-            if *num_samples == 0 {
-                0.0 // don't divide by zero :)
-            } else {
-                (last_timestamp - first_timestamp) / *num_samples as f64
-            }
-        } else {
-            0.0
-        }
-    };
     let stream_info = stream_info_map.get(&stream_id).unwrap();
-    let measured_srate = match stream_info.nominal_srate {
-        Some(_) => Some(measured_srate),
-        None => None,
+
+    let measured_srate = if let Some(_) = stream_info.nominal_srate {
+        Some(opt_string_to_f64(measured_srate_str)?.unwrap_or_else(|| {
+            // measured_srate is missing, so we calculate it ourselves
+
+            // nominal_srate is given as "a floating point number in Hertz. If the stream
+            // has an irregular sampling rate (that is, the samples are not spaced evenly in
+            // time, for example in an event stream), this value must be 0."
+
+            if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
+                (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
+            {
+                if *num_samples == 0 {
+                    0.0 // don't divide by zero :)
+                } else {
+                    (last_timestamp - first_timestamp) / *num_samples as f64
+                }
+            } else {
+                0.0
+            }
+        }))
+    } else {
+        None
     };
     let info = StreamFooterChunkInfo {
         first_timestamp,
@@ -249,18 +182,16 @@ fn parse_stream_footer(
         info,
         xml: root,
     });
-    chunks.push(stream_footer_chunk);
-    Ok(())
+    Ok(stream_footer_chunk)
 }
 
 #[inline]
-fn parse_samples(
+pub(crate) fn parse_samples(
     raw_chunk: RawChunk,
     stream_num_samples_map: &mut HashMap<u32, u64>,
     stream_id: u32,
     stream_info_map: &HashMap<u32, StreamHeaderChunkInfo>,
-    chunks: &mut Vec<Chunk>,
-) -> Result<(), errors::Error> {
+) -> Result<Chunk, errors::Error> {
     let num_samples_byte_num = &raw_chunk.content_bytes[4];
     match num_samples_byte_num {
         1 | 4 | 8 => (),
@@ -463,16 +394,14 @@ fn parse_samples(
         }
     }
     let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
-    chunks.push(samples_chunk);
-    Ok(())
+    Ok(samples_chunk)
 }
 
 #[inline]
-fn parse_stream_header(
+pub(crate) fn parse_stream_header(
     raw_chunk: &RawChunk,
     stream_info_map: &mut HashMap<u32, StreamHeaderChunkInfo>,
-    chunks: &mut Vec<Chunk>,
-) -> Result<(), errors::Error> {
+) -> Result<Chunk, errors::Error> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
     let root = {
@@ -515,8 +444,7 @@ fn parse_stream_header(
         info,
         xml: root,
     };
-    chunks.push(Chunk::StreamHeaderChunk(stream_header_chunk));
-    Ok(())
+    Ok(Chunk::StreamHeaderChunk(stream_header_chunk))
 }
 
 // tests
