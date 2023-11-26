@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use xdf::{Format, Value, XDFFile};
+use xdf::{Format, Values, XDFFile};
 
 const EPSILON: f64 = 0.000000000000001;
 
@@ -29,39 +29,39 @@ fn read_minimal_xdf() {
     let expected_first_samples = vec![
         xdf::Sample {
             timestamp: Some(5.1),
-            values: vec![Value::Int16(192), Value::Int16(255), Value::Int16(238)],
+            values: Values::Int16(vec![192, 255, 238]),
         },
         xdf::Sample {
             timestamp: Some(5.2),
-            values: vec![Value::Int16(12), Value::Int16(22), Value::Int16(32)],
+            values: Values::Int16(vec![12, 22, 32]),
         },
         xdf::Sample {
             timestamp: Some(5.3),
-            values: vec![Value::Int16(13), Value::Int16(23), Value::Int16(33)],
+            values: Values::Int16(vec![13, 23, 33]),
         },
         xdf::Sample {
             timestamp: Some(5.4),
-            values: vec![Value::Int16(14), Value::Int16(24), Value::Int16(34)],
+            values: Values::Int16(vec![14, 24, 34]),
         },
         xdf::Sample {
             timestamp: Some(5.5),
-            values: vec![Value::Int16(15), Value::Int16(25), Value::Int16(35)],
+            values: Values::Int16(vec![15, 25, 35]),
         },
         xdf::Sample {
             timestamp: Some(5.6),
-            values: vec![Value::Int16(12), Value::Int16(22), Value::Int16(32)],
+            values: Values::Int16(vec![12, 22, 32]),
         },
         xdf::Sample {
             timestamp: Some(5.7),
-            values: vec![Value::Int16(13), Value::Int16(23), Value::Int16(33)],
+            values: Values::Int16(vec![13, 23, 33]),
         },
         xdf::Sample {
             timestamp: Some(5.8),
-            values: vec![Value::Int16(14), Value::Int16(24), Value::Int16(34)],
+            values: Values::Int16(vec![14, 24, 34]),
         },
         xdf::Sample {
             timestamp: Some(5.9),
-            values: vec![Value::Int16(15), Value::Int16(25), Value::Int16(35)],
+            values: Values::Int16(vec![15, 25, 35]),
         },
     ];
 
@@ -83,12 +83,12 @@ fn read_minimal_xdf() {
         expected_first_samples
             .iter()
             .map(|s| s.values.clone())
-            .collect::<Vec<Vec<Value>>>(),
+            .collect::<Vec<Values>>(),
         first_stream
             .samples
             .iter()
             .map(|s| s.values.clone())
-            .collect::<Vec<Vec<Value>>>(),
+            .collect::<Vec<Values>>(),
         "first stream values are not as expected"
     );
 

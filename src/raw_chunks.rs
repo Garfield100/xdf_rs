@@ -1,4 +1,5 @@
-use byteorder::{ByteOrder, LittleEndian}; // TODO use T::from_le_bytes() instead
+use byteorder::{ByteOrder, LittleEndian};
+use error_chain::bail;
 use xmltree::Element;
 
 use core::slice;
@@ -6,21 +7,21 @@ use std::{collections::HashMap, io::Read};
 
 use crate::{
     chunk_structs::*,
-    errors::{self, ParseChunkError, ReadChunkError},
-    util::{extract_timestamp, get_text_from_child, opt_string_to_f64, parse_version},
-    Format, Sample, Value,
+    errors::*,
+    util::{extract_timestamp, get_text_from_child, opt_string_to_f64},
+    Format, Sample, Values,
 };
 
-pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChunk>> {
+pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
     let mut content_iter = file_bytes.into_iter().map(|b| *b).enumerate();
 
     for _ in 0..4 {
-        let (index, byte) = content_iter.next().ok_or(ReadChunkError::EOFError)?;
+        let (index, byte) = content_iter.next().ok_or(ErrorKind::NoMagicNumberError)?;
         if byte != "XDF:".as_bytes()[index] {
-            return Err(ReadChunkError::NoMagicNumberError.into());
+            bail!(ErrorKind::NoMagicNumberError);
         }
     }
 
@@ -34,7 +35,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
                     if let Some(next_byte) = content_iter.next() {
                         bytes[i] = next_byte.1;
                     } else {
-                        return Err(ReadChunkError::EOFError.into());
+                        bail!(ErrorKind::ReadChunkError);
                     }
                 }
 
@@ -46,11 +47,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
             }
 
             _ => {
-                return Err(ReadChunkError::ParseError(format!(
-                    "Invalid number of chunk length bytes found at index {}. Expected 1, 4, or 8 but was {}",
-                    num_length_bytes.0, num_length_bytes.1
-                ))
-                .into());
+                bail!(ErrorKind::InvalidNumCountBytes(num_length_bytes.1));
             }
         }
 
@@ -60,7 +57,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
                 let val = content_iter.next();
                 match val {
                     Some(val) => val.1,
-                    None => return Err(ReadChunkError::EOFError.into()),
+                    None => bail!(ErrorKind::ReadChunkError)
                 }
             }
             .clone();
@@ -71,7 +68,8 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
         let chunk_tag: Tag = match chunk_tag_num {
             1 => {
                 if file_header_found {
-                    return Err(ReadChunkError::ParseError(format!("More than one FileHeaders found.")).into());
+                    // more than one FileHeader found
+                    return Err(format!("More than one FileHeaders found.").into());
                 }
                 file_header_found = true;
                 Tag::FileHeader
@@ -81,30 +79,22 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
             4 => Tag::ClockOffset,
             5 => Tag::Boundary,
             6 => Tag::StreamFooter,
-            _ => return Err(ReadChunkError::InvalidTagError(chunk_tag_num).into()),
+            _ => bail!(ErrorKind::InvalidTagError(chunk_tag_num))
         };
 
         //subtract the two tag bytes for the content length
         chunk_length -= 2;
 
-        // try to cast the chunk length to usize in order to allocate a vector with it
-        let chunk_length: usize = match (chunk_length).try_into() {
-            Ok(len) => len,
-            Err(err) => {
-                return Err(ReadChunkError::ParseError(format!(
-                    "Chunk too big. Cannot cast {} to usize\n{}",
-                    chunk_length, err
-                ))
-                .into());
-            }
-        };
+        // if this cast fails the chunk is unreasonably large
+        let chunk_length: usize = chunk_length as usize;
 
         let mut chunk_bytes: Vec<u8> = vec![0; chunk_length];
         for i in 0..chunk_length {
             chunk_bytes[i] = {
                 match content_iter.next() {
                     Some(val) => val.1,
-                    None => return Err(ReadChunkError::EOFError.into()),
+                    //TODO: don't error here, just return the chunks we have so far
+                    None => bail!(ErrorKind::ReadChunkError), // File ended before chunk was finished.
                 }
             };
         }
@@ -118,7 +108,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> errors::Result<Vec<RawChu
     }
 
     if !file_header_found {
-        return Err(ReadChunkError::ParseError(format!("No FileHeader found.")).into());
+        bail!(ErrorKind::MissingFileHeaderError);
     }
 
     return Ok(raw_chunks);
@@ -130,13 +120,13 @@ pub(crate) fn parse_stream_footer(
     raw_chunk: RawChunk,
     stream_num_samples_map: &HashMap<u32, u64>,
     stream_info_map: &HashMap<u32, StreamHeaderChunkInfo>,
-) -> Result<Chunk, errors::Error> {
+) -> Result<Chunk> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
     let root = {
         match Element::parse(&raw_chunk.content_bytes[4..]) {
             Ok(root) => root,
-            Err(err) => return Err(ParseChunkError::XMLParseError(err).into()),
+            Err(err) => Err(err).chain_err(|| ErrorKind::ParseChunkError)?,
         }
     };
     let first_timestamp_str = get_text_from_child(&root, "first_timestamp").ok();
@@ -174,7 +164,7 @@ pub(crate) fn parse_stream_footer(
         last_timestamp,
         sample_count: get_text_from_child(&root, "sample_count")?
             .parse()
-            .map_err(|err| ParseChunkError::BadElementError(format!("Error while parsing sample count: {}", err)))?,
+            .chain_err(|| ErrorKind::BadXMLElementError("sample_count".to_string()))?,
         measured_srate,
     };
     let stream_footer_chunk = Chunk::StreamFooterChunk(StreamFooterChunk {
@@ -191,33 +181,23 @@ pub(crate) fn parse_samples(
     stream_num_samples_map: &mut HashMap<u32, u64>,
     stream_id: u32,
     stream_info_map: &HashMap<u32, StreamHeaderChunkInfo>,
-) -> Result<Chunk, errors::Error> {
+) -> Result<Chunk> {
     let num_samples_byte_num = &raw_chunk.content_bytes[4];
+
     match num_samples_byte_num {
         1 | 4 | 8 => (),
-        _ => {
-            return Err(ParseChunkError::InvalidChunkBytesError {
-                msg: format!(
-                    "Invalid amount of sample number bytes: was {} but expected 1, 4, or 8.",
-                    num_samples_byte_num
-                ),
-                raw_chunk_bytes: raw_chunk.content_bytes,
-                raw_chunk_tag: 3, //always 3 because we are in the match arm for the samples tag
-                offset: 4,
-            }
-            .into());
-        }
+        n => bail!(ErrorKind::InvalidNumCountBytes(*n)),
     }
+
     let num_samples_bytes = &raw_chunk.content_bytes[5..(5 + num_samples_byte_num) as usize];
     let num_samples: u64 = LittleEndian::read_uint(num_samples_bytes, *num_samples_byte_num as usize);
-    if stream_num_samples_map.contains_key(&stream_id) {
-        stream_num_samples_map.insert(stream_id, stream_num_samples_map.get(&stream_id).unwrap() + num_samples);
-    } else {
-        stream_num_samples_map.insert(stream_id, num_samples);
-    }
+
+    stream_num_samples_map.entry(stream_id).and_modify(|e| *e += num_samples).or_insert(num_samples);
+
     let stream_info = stream_info_map
         .get(&stream_id)
-        .ok_or(ParseChunkError::MissingHeaderError { stream_id })?;
+        .ok_or(ErrorKind::MissingStreamHeaderError(stream_id))?;
+
     let type_size: Option<i32> = match stream_info.channel_format {
         Format::Int8 => Some(1),
         Format::Int16 => Some(2),
@@ -238,11 +218,15 @@ pub(crate) fn parse_samples(
             // realign the whole slice directly
             let values_bytes =
                 &raw_chunk.content_bytes[offset..offset + (type_size as usize * stream_info.channel_count as usize)];
-            let values: Vec<Value> = match stream_info.channel_format {
-                Format::Int8 => bytemuck::cast_slice::<u8, i8>(values_bytes)
-                    .iter()
-                    .map(|&v| Value::Int8(v))
-                    .collect(),
+            let values: Values = match stream_info.channel_format {
+                Format::Int8 => {
+                    let vals = bytemuck::cast_slice::<u8, i8>(values_bytes)
+                        .iter()
+                        .copied()
+                        .collect::<Vec<i8>>();
+
+                    Values::Int8(vals)
+                }
                 Format::Int16 => {
                     let mut vec_for_alignment: Vec<i16> = vec![0; values_bytes.len() / 2];
 
@@ -258,10 +242,9 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    bytemuck::cast_slice::<u8, i16>(mutable_bytes)
-                        .iter()
-                        .map(|&v| Value::Int16(v))
-                        .collect()
+                    let vals = bytemuck::cast_slice::<u8, i16>(mutable_bytes).iter().copied().collect();
+
+                    Values::Int16(vals)
                 }
                 Format::Int32 => {
                     let mut vec_for_alignment: Vec<i32> = vec![0; values_bytes.len() / 4];
@@ -278,10 +261,9 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    bytemuck::cast_slice::<u8, i32>(mutable_bytes)
-                        .iter()
-                        .map(|&v| Value::Int32(v))
-                        .collect()
+                    let vals = bytemuck::cast_slice::<u8, i32>(mutable_bytes).iter().copied().collect();
+
+                    Values::Int32(vals)
                 }
                 Format::Int64 => {
                     let mut vec_for_alignment: Vec<i64> = vec![0; values_bytes.len() / 8];
@@ -298,10 +280,9 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    bytemuck::cast_slice::<u8, i64>(mutable_bytes)
-                        .iter()
-                        .map(|&v| Value::Int64(v))
-                        .collect()
+                    let vals = bytemuck::cast_slice::<u8, i64>(mutable_bytes).iter().copied().collect();
+
+                    Values::Int64(vals)
                 }
                 Format::Float32 => {
                     let mut vec_for_alignment: Vec<f32> = vec![0.0; values_bytes.len() / 4];
@@ -318,10 +299,9 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    bytemuck::cast_slice::<u8, f32>(mutable_bytes)
-                        .iter()
-                        .map(|&v| Value::Float32(v))
-                        .collect()
+                    let vals = bytemuck::cast_slice::<u8, f32>(mutable_bytes).iter().copied().collect();
+
+                    Values::Float32(vals)
                 }
                 Format::Float64 => {
                     let mut vec_for_alignment: Vec<f64> = vec![0.0; values_bytes.len() / 8];
@@ -338,10 +318,9 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    bytemuck::cast_slice::<u8, f64>(mutable_bytes)
-                        .iter()
-                        .map(|&v| Value::Float64(v))
-                        .collect()
+                    let vals = bytemuck::cast_slice::<u8, f64>(mutable_bytes).iter().copied().collect();
+
+                    Values::Float64(vals)
                 }
                 Format::String => unreachable!(),
             };
@@ -353,42 +332,28 @@ pub(crate) fn parse_samples(
         //strings
         for _ in 0..num_samples {
             let timestamp: Option<f64> = extract_timestamp(&raw_chunk, &mut offset);
-            let num_length_bytes: usize = raw_chunk.content_bytes[offset] as usize;
+            let num_length_bytes = raw_chunk.content_bytes[offset];
             offset += 1; //for number of length bytes field
             let value_length = match num_length_bytes {
                 1 => raw_chunk.content_bytes[offset] as u64,
-                4 => u32::from_le_bytes((&raw_chunk.content_bytes[offset..(offset + num_length_bytes)]).try_into()?)
-                    as u64,
-                8 => u64::from_le_bytes((&raw_chunk.content_bytes[offset..(offset + num_length_bytes)]).try_into()?),
-                _ => {
-                    let msg = format!(
-                        "Error: Number of length bytes for this value are invalid. Expected 1, 4 or 8 but got {}",
-                        num_length_bytes
-                    );
-                    return Err(ParseChunkError::InvalidChunkBytesError {
-                        msg,
-                        raw_chunk_bytes: raw_chunk.content_bytes,
-                        raw_chunk_tag: 3, // always 3 because we are in the match arm for the samples tag
-                        offset,
-                    }
-                    .into());
-                }
+                4 => u32::from_le_bytes(
+                    (&raw_chunk.content_bytes[offset..(offset + num_length_bytes as usize)]).try_into()?,
+                ) as u64,
+                8 => u64::from_le_bytes(
+                    (&raw_chunk.content_bytes[offset..(offset + num_length_bytes as usize)]).try_into()?,
+                ),
+                n => bail!(ErrorKind::InvalidNumCountBytes(n)),
             } as usize;
-            offset += num_length_bytes; // for length field
+            offset += num_length_bytes as usize; // for length field
             let mut value_bytes = &raw_chunk.content_bytes[offset..(offset + value_length)];
 
             // Turn the bytes into a valid utf-8 string
             let mut value_string = String::new();
-            if let Err(err) = value_bytes.read_to_string(&mut value_string) {
-                return Err(ParseChunkError::Utf8Error(err).into());
-            };
-
-            let value = Value::String(value_string);
-            let value_vec = vec![value];
+            value_bytes.read_to_string(&mut value_string)?;
 
             samples.push(Sample {
                 timestamp,
-                values: value_vec,
+                values: Values::String(value_string),
             });
             offset += value_length; // for value field
         }
@@ -401,25 +366,21 @@ pub(crate) fn parse_samples(
 pub(crate) fn parse_stream_header(
     raw_chunk: &RawChunk,
     stream_info_map: &mut HashMap<u32, StreamHeaderChunkInfo>,
-) -> Result<Chunk, errors::Error> {
+) -> Result<Chunk> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
-    let root = {
-        match Element::parse(&raw_chunk.content_bytes[4..]) {
-            Ok(root) => root,
-            Err(err) => return Err(ParseChunkError::XMLParseError(err).into()),
-        }
-    };
+    let root = Element::parse(&raw_chunk.content_bytes[4..])?;
+
     let info = StreamHeaderChunkInfo {
         name: Some(get_text_from_child(&root, "name")?),
         r#type: Some(get_text_from_child(&root, "type")?),
         channel_count: get_text_from_child(&root, "channel_count")?
             .parse()
-            .map_err(|err| ParseChunkError::BadElementError(format!("Error while parsing channel count: {}", err)))?,
+            .chain_err(|| ErrorKind::BadXMLElementError("channel_count".to_string()))?,
         nominal_srate: Some(
-            get_text_from_child(&root, "nominal_srate")?.parse().map_err(|err| {
-                ParseChunkError::BadElementError(format!("Error while parsing channel count: {}", err))
-            })?,
+            get_text_from_child(&root, "nominal_srate")?
+                .parse()
+                .chain_err(|| ErrorKind::BadXMLElementError("nominal_srate".to_string()))?,
         ),
         channel_format: match get_text_from_child(&root, "channel_format")?.to_lowercase().as_str() {
             "in8" => Format::Int8,
@@ -429,9 +390,8 @@ pub(crate) fn parse_stream_header(
             "float32" => Format::Float32,
             "double64" => Format::Float64,
             "string" => Format::String,
-            invalid => {
-                return Err(ParseChunkError::BadElementError(format!("Invalid stream format \"{}\"", invalid)).into())
-            }
+            invalid => bail!(Error::from(format!("Invalid stream channel format \"{}\"", invalid))
+                .chain_err(|| ErrorKind::BadXMLElementError("channel_format".to_string()))),
         },
         desc: match root.get_child("desc") {
             Some(desc) => Some(desc.clone()),
@@ -452,30 +412,25 @@ pub(crate) fn parse_stream_header(
 fn empty_file() {
     let bytes: Vec<u8> = vec![];
     let res = read_to_raw_chunks(bytes.as_slice());
-    assert!(matches!(
-        res.unwrap_err(),
-        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
-    ));
+    let err = res.unwrap_err();
+    assert!(matches!(err, Error(ErrorKind::NoMagicNumberError, _)), "Expected NoMagicNumberError, got {:?}", err);
 }
 
 #[test]
-fn file_too_short() {
-    let bytes: Vec<u8> = vec![b'X'];
-    let res = read_to_raw_chunks(bytes.as_slice());
-    assert!(matches!(
-        res.unwrap_err(),
-        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::EOFError), _)
-    ));
-}
-
-#[test]
-fn no_magic_number() {
+fn no_magic_num() {
     let bytes: Vec<u8> = vec![b'X', b'D', b'A', b':'];
     let res = read_to_raw_chunks(bytes.as_slice());
-    assert!(matches!(
-        res.unwrap_err(),
-        errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::NoMagicNumberError), _)
-    ));
+    let err = res.unwrap_err();
+    assert!(matches!(err, Error(ErrorKind::NoMagicNumberError, _)), "Expected NoMagicNumberError, got {:?}", err);
+}
+
+#[test]
+fn chunk_too_short() {
+    // magic number, then a Samples chunk with specified length of length 20 but insufficient actual length
+    let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 4, 0, 0, 0, 20, 3, 0, 1, 2, 3];
+    let res = read_to_raw_chunks(bytes.as_slice());
+    let err = res.unwrap_err();
+    assert!(matches!(err, Error(ErrorKind::ReadChunkError, _)), "Expected ReadChunkError, got {:?}", err);
 }
 
 #[test]
@@ -483,14 +438,12 @@ fn invalid_tags() {
     //tag 0 is invalid
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 0, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
-    assert!(
-        matches!(res.unwrap_err(), errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 0)
-    );
-
+    let err = res.unwrap_err();
+    assert!(matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 0), "Expected InvalidTagError(0), got {:?}", err);
+    
     //tag 7 is invalid
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 7, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
-    assert!(
-        matches!(res.unwrap_err(), errors::Error(errors::ErrorKind::ReadChunkError(ReadChunkError::InvalidTagError(invalid_tag)), _) if invalid_tag == 7)
-    );
+    let err = res.unwrap_err();
+    assert!(matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 7), "Expected InvalidTagError(7), got {:?}", err);
 }

@@ -1,14 +1,16 @@
 use byteorder::{ByteOrder, LittleEndian};
+use error_chain::bail;
 use xmltree::Element;
 
-use crate::{chunk_structs::RawChunk, errors::ParseChunkError};
+use crate::{chunk_structs::RawChunk, errors::*};
 
-pub(crate) fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
+pub(crate) fn parse_version(root: &Element) -> Result<f32> {
     let version_element = match root.get_child("version") {
         Some(child) => child,
 
         //XML does not contain the tag "version"
-        None => return Err(ParseChunkError::BadElementError("version".to_string())),
+        None => bail!(Error::from("\"version\" XML tag not found")
+            .chain_err(|| ErrorKind::BadXMLElementError("version".to_string()))),
     };
 
     let version_str = {
@@ -16,7 +18,8 @@ pub(crate) fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
             Some(val) => val,
 
             //the version tag exists but it is empty
-            None => return Err(ParseChunkError::BadElementError("version".to_string())),
+            None => bail!(Error::from("Empty \"version\" XML tag")
+                .chain_err(|| ErrorKind::BadXMLElementError("version".to_string()))),
         }
     };
 
@@ -25,38 +28,31 @@ pub(crate) fn parse_version(root: &Element) -> Result<f32, ParseChunkError> {
             Ok(t) => t,
 
             //the version text could not be parsed into a float
-            Err(_e) => {
-                return Err(ParseChunkError::BadElementError("version".to_string()));
-            }
+            Err(e) => bail!(Error::with_chain(
+                e,
+                ErrorKind::BadXMLElementError("version".to_string())
+            )),
         }
     };
 
     return Ok(version);
 }
 
-pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, ParseChunkError> {
+pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<String> {
     Ok(root
         .get_child(child_name)
-        .ok_or(ParseChunkError::BadElementError(child_name.to_string()))?
+        .ok_or(ErrorKind::BadXMLElementError(child_name.to_string()))?
         .get_text()
-        .ok_or(ParseChunkError::BadElementError(child_name.to_string()))?
+        .ok_or(ErrorKind::BadXMLElementError(child_name.to_string()))?
         .to_string())
 }
 
-pub(crate) fn opt_string_to_f64(opt_string: Option<String>) -> Result<Option<f64>, ParseChunkError> {
-    match opt_string {
-        Some(val_str) => {
-            let val_res = val_str.parse::<f64>();
-            match val_res {
-                Ok(val) => Ok(Some(val)),
-                Err(err) => Err(ParseChunkError::BadElementError(format!(
-                    "Error while parsing {}: {}",
-                    val_str, err
-                ))),
-            }
-        }
-        None => Ok(None),
-    }
+// TODO implement using traits instead
+pub(crate) fn opt_string_to_f64(opt_string: Option<String>) -> Result<Option<f64>> {
+    opt_string
+        .map(|s| s.parse::<f64>())
+        .transpose()
+        .map_err(|e| Error::from(e))
 }
 
 pub(crate) fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Option<f64> {
@@ -91,7 +87,7 @@ fn test_extract_timestamp_none() {
 }
 
 #[test]
-fn test_extract_timestamp_some(){
+fn test_extract_timestamp_some() {
     let mut offset = 0;
     let raw_chunk = RawChunk {
         tag: crate::chunk_structs::Tag::StreamHeader,
