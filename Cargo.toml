@@ -10,6 +10,7 @@ exclude = ["example-files", "!example-files/minimal.xdf", ".*"]
 bytemuck = "1.14.0"
 byteorder = "1.4.3"
 error-chain = "0.12.4"
+log = "0.4.20"
 thiserror = "1.0.38"
 xmltree = "0.10.3"
 
