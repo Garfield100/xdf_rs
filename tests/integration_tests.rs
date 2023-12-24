@@ -24,7 +24,7 @@ fn read_minimal_xdf() {
     assert_eq!(read_ids.as_slice(), stream_ids);
 
     let first_stream = xdf_file.streams.get(&stream_ids[0]).unwrap();
-    let second_stream = xdf_file.streams.get(&stream_ids[1]).unwrap();
+    let _second_stream = xdf_file.streams.get(&stream_ids[1]).unwrap();
 
     let expected_first_samples = vec![
         xdf::Sample {

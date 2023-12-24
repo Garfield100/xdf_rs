@@ -10,10 +10,6 @@
 //!
 //! [`XDF files`]: https://github.com/sccn/xdf/wiki/Specifications
 
-// TODO remove unused imports
-
-use std::convert::identity;
-use std::default;
 use std::{collections::HashMap, rc::Rc};
 
 mod chunk_structs;
@@ -33,7 +29,6 @@ use util::*;
 use xmltree::Element;
 
 use crate::chunk_structs::Chunk;
-use crate::raw_chunks::*;
 
 // xdf file struct
 #[derive(Debug)]
@@ -53,19 +48,6 @@ pub enum Format {
     String,
 }
 
-impl Format {
-    const fn byte_size(self) -> usize {
-        match self {
-            Format::Int8 => 1,
-            Format::Int16 => 2,
-            Format::Int32 => 4,
-            Format::Int64 => 8,
-            Format::Float32 => 4,
-            Format::Float64 => 8,
-            Format::String => panic!("String format has no constant size"),
-        }
-    }
-}
 
 // TODO use Rc<slice> instead of Vec?
 #[derive(Debug, Clone, PartialEq)]
@@ -113,14 +95,13 @@ impl XDFFile {
                         if version != 1.0 {
                             return Err(ErrorKind::VersionNotSupportedError(version).into());
                         }
-                        
+
                         let file_header_chunk = FileHeaderChunk {
                             version: parse_version(&root)?,
                             xml: root,
                         };
 
-
-                        Ok(Chunk::FileHeaderChunk(file_header_chunk))
+                        Ok(Chunk::FileHeader(file_header_chunk))
                     }
                     Tag::StreamHeader => parse_stream_header(&raw_chunk, &mut stream_info_map),
                     Tag::Samples => parse_samples(raw_chunk, &mut stream_num_samples_map, stream_id, &stream_info_map),
@@ -128,39 +109,39 @@ impl XDFFile {
                         let collection_time: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[4..12]).try_into()?);
                         let offset_value: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[12..20]).try_into()?);
 
-                        let clock_offset_chunk = Chunk::ClockOffsetChunk(ClockOffsetChunk {
+                        let clock_offset_chunk = Chunk::ClockOffset(ClockOffsetChunk {
                             stream_id,
                             collection_time,
                             offset_value,
                         });
                         Ok(clock_offset_chunk)
                     }
-                    Tag::Boundary => Ok(Chunk::BoundaryChunk(BoundaryChunk {})),
+                    Tag::Boundary => Ok(Chunk::Boundary(BoundaryChunk {})),
                     Tag::StreamFooter => parse_stream_footer(raw_chunk, &stream_num_samples_map, &stream_info_map),
                 }
             })
             .filter_map(|chunk_res| {
                 match chunk_res {
-                    Ok(Chunk::FileHeaderChunk(c)) => {
+                    Ok(Chunk::FileHeader(c)) => {
                         file_header_chunk = Some(c);
                         None
                     }
-                    Ok(Chunk::StreamHeaderChunk(c)) => {
+                    Ok(Chunk::StreamHeader(c)) => {
                         stream_header_chunks.push(c);
                         None
                     }
-                    Ok(Chunk::StreamFooterChunk(c)) => {
+                    Ok(Chunk::StreamFooter(c)) => {
                         stream_footer_chunks.push(c);
                         None
                     }
-                    Ok(Chunk::SamplesChunk(c)) => Some(c),
-                    Ok(Chunk::ClockOffsetChunk(c)) => {
+                    Ok(Chunk::Samples(c)) => Some(c),
+                    Ok(Chunk::ClockOffset(_c)) => {
                         // TODO handle clock offsets
                         // should be stored like the other chunks, interpolated, and then applied to the timestamps
                         None
                     }
-                    Ok(Chunk::BoundaryChunk(_)) => None,
-                    Err(err) => {
+                    Ok(Chunk::Boundary(_)) => None,
+                    Err(_err) => {
                         None // TODO log error?
                     }
                 }
@@ -168,9 +149,7 @@ impl XDFFile {
             .fold(
                 HashMap::new(),
                 |mut map: HashMap<u32, Vec<std::vec::IntoIter<Sample>>>, chunk| {
-                    map.entry(chunk.stream_id)
-                        .or_insert(default::Default::default())
-                        .push(chunk.samples.into_iter());
+                    map.entry(chunk.stream_id).or_default().push(chunk.samples.into_iter());
                     map
                 },
             );
@@ -190,13 +169,13 @@ impl XDFFile {
 
             // TODO we might want to reduce this to a log warning to be more error tolerant in case a recording stopped unexpectedly
             // check if all stream headers have a corresponding stream footer
-            for (&stream_id, _) in &stream_header_map {
+            for &stream_id in stream_footer_map.keys() {
                 stream_footer_map
                     .get(&stream_id)
                     .ok_or_else(|| errors::ErrorKind::MissingStreamFooterChunk(stream_id))?;
             }
 
-            for (&stream_id, _) in &stream_footer_map {
+            for &stream_id in stream_footer_map.keys() {
                 stream_header_map
                     .get(&stream_id)
                     .ok_or_else(|| errors::ErrorKind::MissingStreamHeaderError(stream_id))?;
@@ -205,7 +184,7 @@ impl XDFFile {
             let mut streams_map: HashMap<u32, Stream> = HashMap::new();
 
             for (&stream_id, stream_header) in &stream_header_map {
-                let stream_footer = stream_footer_map.get(&stream_id).unwrap(); // TODO once stream footers are optional, this could panic
+                let stream_footer = stream_footer_map.get(&stream_id);
 
                 let name = stream_header.info.name.as_ref().map(|name| Rc::from(name.as_str()));
 
@@ -220,7 +199,7 @@ impl XDFFile {
                     .remove(&stream_id)
                     .unwrap_or_default() // stream could have no samples
                     .into_iter()
-                    .flat_map(identity)
+                    .flatten()
                     .enumerate()
                     .map(|(i, s)| {
                         if let Some(srate) = stream_header.info.nominal_srate {
@@ -251,7 +230,7 @@ impl XDFFile {
                     name,
                     r#type,
                     stream_header: stream_header.xml.clone(),
-                    stream_footer: stream_footer.xml.clone(),
+                    stream_footer: stream_footer.map(|s| s.xml.clone()),
                     samples: samples_vec,
                 };
 

@@ -1,5 +1,6 @@
 use byteorder::{ByteOrder, LittleEndian};
 use error_chain::bail;
+use log::warn;
 use xmltree::Element;
 
 use core::slice;
@@ -16,7 +17,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
-    let mut content_iter = file_bytes.into_iter().map(|b| *b).enumerate();
+    let mut content_iter = file_bytes.iter().copied().enumerate();
 
     for _ in 0..4 {
         let (index, byte) = content_iter.next().ok_or(ErrorKind::NoMagicNumberError)?;
@@ -57,10 +58,9 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
                 let val = content_iter.next();
                 match val {
                     Some(val) => val.1,
-                    None => bail!(ErrorKind::ReadChunkError)
+                    None => bail!(ErrorKind::ReadChunkError),
                 }
-            }
-            .clone();
+            };
         }
 
         let chunk_tag_num = LittleEndian::read_u16(&tag_bytes);
@@ -69,7 +69,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
             1 => {
                 if file_header_found {
                     // more than one FileHeader found
-                    return Err(format!("More than one FileHeaders found.").into());
+                    return Err("More than one FileHeaders found.".into());
                 }
                 file_header_found = true;
                 Tag::FileHeader
@@ -79,7 +79,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
             4 => Tag::ClockOffset,
             5 => Tag::Boundary,
             6 => Tag::StreamFooter,
-            _ => bail!(ErrorKind::InvalidTagError(chunk_tag_num))
+            _ => bail!(ErrorKind::InvalidTagError(chunk_tag_num)),
         };
 
         //subtract the two tag bytes for the content length
@@ -93,8 +93,11 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
             chunk_bytes[i] = {
                 match content_iter.next() {
                     Some(val) => val.1,
-                    //TODO: don't error here, just return the chunks we have so far
-                    None => bail!(ErrorKind::ReadChunkError), // File ended before chunk was finished.
+                    None => {
+                        // File ended before chunk was finished.
+                        warn!("File ended mid-chunk, something is likely corrupted.");
+                        return Ok(raw_chunks);
+                    }
                 }
             };
         }
@@ -111,7 +114,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
         bail!(ErrorKind::MissingFileHeaderError);
     }
 
-    return Ok(raw_chunks);
+    Ok(raw_chunks)
 }
 
 // yes these are ugly, they were extracted by refactoring
@@ -136,7 +139,7 @@ pub(crate) fn parse_stream_footer(
     let last_timestamp = opt_string_to_f64(last_timestamp_str)?;
     let stream_info = stream_info_map.get(&stream_id).unwrap();
 
-    let measured_srate = if let Some(_) = stream_info.nominal_srate {
+    let measured_srate = if stream_info.nominal_srate.is_some() {
         Some(opt_string_to_f64(measured_srate_str)?.unwrap_or_else(|| {
             // measured_srate is missing, so we calculate it ourselves
 
@@ -167,7 +170,7 @@ pub(crate) fn parse_stream_footer(
             .chain_err(|| ErrorKind::BadXMLElementError("sample_count".to_string()))?,
         measured_srate,
     };
-    let stream_footer_chunk = Chunk::StreamFooterChunk(StreamFooterChunk {
+    let stream_footer_chunk = Chunk::StreamFooter(StreamFooterChunk {
         stream_id,
         info,
         xml: root,
@@ -192,7 +195,10 @@ pub(crate) fn parse_samples(
     let num_samples_bytes = &raw_chunk.content_bytes[5..(5 + num_samples_byte_num) as usize];
     let num_samples: u64 = LittleEndian::read_uint(num_samples_bytes, *num_samples_byte_num as usize);
 
-    stream_num_samples_map.entry(stream_id).and_modify(|e| *e += num_samples).or_insert(num_samples);
+    stream_num_samples_map
+        .entry(stream_id)
+        .and_modify(|e| *e += num_samples)
+        .or_insert(num_samples);
 
     let stream_info = stream_info_map
         .get(&stream_id)
@@ -220,10 +226,7 @@ pub(crate) fn parse_samples(
                 &raw_chunk.content_bytes[offset..offset + (type_size as usize * stream_info.channel_count as usize)];
             let values: Values = match stream_info.channel_format {
                 Format::Int8 => {
-                    let vals = bytemuck::cast_slice::<u8, i8>(values_bytes)
-                        .iter()
-                        .copied()
-                        .collect::<Vec<i8>>();
+                    let vals = bytemuck::cast_slice::<u8, i8>(values_bytes).to_vec();
 
                     Values::Int8(vals)
                 }
@@ -242,7 +245,7 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    let vals = bytemuck::cast_slice::<u8, i16>(mutable_bytes).iter().copied().collect();
+                    let vals = bytemuck::cast_slice::<u8, i16>(mutable_bytes).to_vec();
 
                     Values::Int16(vals)
                 }
@@ -261,7 +264,7 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    let vals = bytemuck::cast_slice::<u8, i32>(mutable_bytes).iter().copied().collect();
+                    let vals = bytemuck::cast_slice::<u8, i32>(mutable_bytes).to_vec();
 
                     Values::Int32(vals)
                 }
@@ -280,7 +283,7 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    let vals = bytemuck::cast_slice::<u8, i64>(mutable_bytes).iter().copied().collect();
+                    let vals = bytemuck::cast_slice::<u8, i64>(mutable_bytes).to_vec();
 
                     Values::Int64(vals)
                 }
@@ -299,7 +302,7 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    let vals = bytemuck::cast_slice::<u8, f32>(mutable_bytes).iter().copied().collect();
+                    let vals = bytemuck::cast_slice::<u8, f32>(mutable_bytes).to_vec();
 
                     Values::Float32(vals)
                 }
@@ -318,7 +321,7 @@ pub(crate) fn parse_samples(
                         mutable_bytes.copy_from_slice(values_bytes);
                     }
 
-                    let vals = bytemuck::cast_slice::<u8, f64>(mutable_bytes).iter().copied().collect();
+                    let vals = bytemuck::cast_slice::<u8, f64>(mutable_bytes).to_vec();
 
                     Values::Float64(vals)
                 }
@@ -358,7 +361,7 @@ pub(crate) fn parse_samples(
             offset += value_length; // for value field
         }
     }
-    let samples_chunk = Chunk::SamplesChunk(SamplesChunk { stream_id, samples });
+    let samples_chunk = Chunk::Samples(SamplesChunk { stream_id, samples });
     Ok(samples_chunk)
 }
 
@@ -393,10 +396,7 @@ pub(crate) fn parse_stream_header(
             invalid => bail!(Error::from(format!("Invalid stream channel format \"{}\"", invalid))
                 .chain_err(|| ErrorKind::BadXMLElementError("channel_format".to_string()))),
         },
-        desc: match root.get_child("desc") {
-            Some(desc) => Some(desc.clone()),
-            None => None,
-        },
+        desc: root.get_child("desc").cloned(),
     };
     stream_info_map.insert(stream_id, info.clone());
     let stream_header_chunk = StreamHeaderChunk {
@@ -404,7 +404,7 @@ pub(crate) fn parse_stream_header(
         info,
         xml: root,
     };
-    Ok(Chunk::StreamHeaderChunk(stream_header_chunk))
+    Ok(Chunk::StreamHeader(stream_header_chunk))
 }
 
 // tests
@@ -413,7 +413,11 @@ fn empty_file() {
     let bytes: Vec<u8> = vec![];
     let res = read_to_raw_chunks(bytes.as_slice());
     let err = res.unwrap_err();
-    assert!(matches!(err, Error(ErrorKind::NoMagicNumberError, _)), "Expected NoMagicNumberError, got {:?}", err);
+    assert!(
+        matches!(err, Error(ErrorKind::NoMagicNumberError, _)),
+        "Expected NoMagicNumberError, got {:?}",
+        err
+    );
 }
 
 #[test]
@@ -421,7 +425,11 @@ fn no_magic_num() {
     let bytes: Vec<u8> = vec![b'X', b'D', b'A', b':'];
     let res = read_to_raw_chunks(bytes.as_slice());
     let err = res.unwrap_err();
-    assert!(matches!(err, Error(ErrorKind::NoMagicNumberError, _)), "Expected NoMagicNumberError, got {:?}", err);
+    assert!(
+        matches!(err, Error(ErrorKind::NoMagicNumberError, _)),
+        "Expected NoMagicNumberError, got {:?}",
+        err
+    );
 }
 
 #[test]
@@ -429,8 +437,8 @@ fn chunk_too_short() {
     // magic number, then a Samples chunk with specified length of length 20 but insufficient actual length
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 4, 0, 0, 0, 20, 3, 0, 1, 2, 3];
     let res = read_to_raw_chunks(bytes.as_slice());
-    let err = res.unwrap_err();
-    assert!(matches!(err, Error(ErrorKind::ReadChunkError, _)), "Expected ReadChunkError, got {:?}", err);
+    let chunks = res.unwrap();
+    assert_eq!(chunks.len(), 0);
 }
 
 #[test]
@@ -439,11 +447,19 @@ fn invalid_tags() {
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 0, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
     let err = res.unwrap_err();
-    assert!(matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 0), "Expected InvalidTagError(0), got {:?}", err);
-    
+    assert!(
+        matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 0),
+        "Expected InvalidTagError(0), got {:?}",
+        err
+    );
+
     //tag 7 is invalid
     let bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 3, 7, 0, 10];
     let res = read_to_raw_chunks(bytes.as_slice());
     let err = res.unwrap_err();
-    assert!(matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 7), "Expected InvalidTagError(7), got {:?}", err);
+    assert!(
+        matches!(err, Error(ErrorKind::InvalidTagError(invalid_tag), _) if invalid_tag == 7),
+        "Expected InvalidTagError(7), got {:?}",
+        err
+    );
 }

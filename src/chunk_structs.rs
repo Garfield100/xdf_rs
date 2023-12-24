@@ -4,12 +4,12 @@ use crate::{Format, Sample};
 
 #[derive(Debug)]
 pub(crate) enum Chunk {
-    FileHeaderChunk(FileHeaderChunk),
-    StreamHeaderChunk(StreamHeaderChunk),
-    SamplesChunk(SamplesChunk),
-    ClockOffsetChunk(ClockOffsetChunk),
-    BoundaryChunk(BoundaryChunk),
-    StreamFooterChunk(StreamFooterChunk),
+    FileHeader(FileHeaderChunk),
+    StreamHeader(StreamHeaderChunk),
+    Samples(SamplesChunk),
+    ClockOffset(ClockOffsetChunk),
+    Boundary(BoundaryChunk),
+    StreamFooter(StreamFooterChunk),
 }
 
 #[derive(Debug)]
@@ -39,8 +39,6 @@ fn file_header_chunk() {
     assert_eq!(chunks[0].content_bytes.len(), 56);
 }
 
-
-
 // minimal tags in version 1.x:
 // channel count
 // nominal srate
@@ -56,7 +54,7 @@ pub(crate) struct StreamHeaderChunkInfo {
     pub channel_count: u32,
     pub nominal_srate: Option<f64>,
     pub channel_format: Format,
-    
+
     pub name: Option<String>,
     pub r#type: Option<String>, // "type" is obviously a reserved keyword but can be escaped using r#
     pub desc: Option<Element>,
