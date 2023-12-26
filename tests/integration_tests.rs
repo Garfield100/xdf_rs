@@ -26,41 +26,42 @@ fn read_minimal_xdf() {
     let first_stream = xdf_file.streams.get(&stream_ids[0]).unwrap();
     let _second_stream = xdf_file.streams.get(&stream_ids[1]).unwrap();
 
+    // timestamps minus the clock offsets (always -0.1 in this file)
     let expected_first_samples = vec![
         xdf::Sample {
-            timestamp: Some(5.1),
+            timestamp: Some(5.1 - 0.1),
             values: Values::Int16(vec![192, 255, 238]),
         },
         xdf::Sample {
-            timestamp: Some(5.2),
+            timestamp: Some(5.2 - 0.1),
             values: Values::Int16(vec![12, 22, 32]),
         },
         xdf::Sample {
-            timestamp: Some(5.3),
+            timestamp: Some(5.3 - 0.1),
             values: Values::Int16(vec![13, 23, 33]),
         },
         xdf::Sample {
-            timestamp: Some(5.4),
+            timestamp: Some(5.4 - 0.1),
             values: Values::Int16(vec![14, 24, 34]),
         },
         xdf::Sample {
-            timestamp: Some(5.5),
+            timestamp: Some(5.5 - 0.1),
             values: Values::Int16(vec![15, 25, 35]),
         },
         xdf::Sample {
-            timestamp: Some(5.6),
+            timestamp: Some(5.6 - 0.1),
             values: Values::Int16(vec![12, 22, 32]),
         },
         xdf::Sample {
-            timestamp: Some(5.7),
+            timestamp: Some(5.7 - 0.1),
             values: Values::Int16(vec![13, 23, 33]),
         },
         xdf::Sample {
-            timestamp: Some(5.8),
+            timestamp: Some(5.8 - 0.1),
             values: Values::Int16(vec![14, 24, 34]),
         },
         xdf::Sample {
-            timestamp: Some(5.9),
+            timestamp: Some(5.9 - 0.1),
             values: Values::Int16(vec![15, 25, 35]),
         },
     ];
@@ -104,7 +105,7 @@ fn read_minimal_xdf() {
         );
         assert!(
             (actual_sample.timestamp.unwrap() - expected_sample.timestamp.unwrap()).abs() < EPSILON,
-            "timestamp of sample {} in first stream was {}, expected {} to be within {} of it",
+            "timestamp of sample {} in first stream is {}, expected {} to be within {} of it",
             i,
             actual_sample.timestamp.unwrap(),
             expected_sample.timestamp.unwrap(),

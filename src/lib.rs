@@ -30,6 +30,7 @@ use xmltree::Element;
 
 use crate::chunk_structs::Chunk;
 
+type StreamID = u32;
 // xdf file struct
 #[derive(Debug)]
 pub struct XDFFile {
@@ -47,7 +48,6 @@ pub enum Format {
     Float64,
     String,
 }
-
 
 // TODO use Rc<slice> instead of Vec?
 #[derive(Debug, Clone, PartialEq)]
@@ -78,6 +78,7 @@ impl XDFFile {
         let mut file_header_chunk: Option<FileHeaderChunk> = None;
         let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
         let mut stream_footer_chunks: Vec<StreamFooterChunk> = Vec::new();
+        let mut clock_offsets = HashMap::<StreamID, Vec<ClockOffsetChunk>>::new();
 
         let mut sample_map = raw_chunks
             .into_iter()
@@ -135,9 +136,9 @@ impl XDFFile {
                         None
                     }
                     Ok(Chunk::Samples(c)) => Some(c),
-                    Ok(Chunk::ClockOffset(_c)) => {
-                        // TODO handle clock offsets
-                        // should be stored like the other chunks, interpolated, and then applied to the timestamps
+                    Ok(Chunk::ClockOffset(c)) => {
+                        clock_offsets.entry(c.stream_id).or_default().push(c);
+
                         None
                     }
                     Ok(Chunk::Boundary(_)) => None,
@@ -194,6 +195,9 @@ impl XDFFile {
                     .as_ref()
                     .map(|r#type| Rc::from(r#type.as_str()));
 
+                let stream_offsets = clock_offsets.remove(&stream_id).unwrap_or_default();
+                let mut offset_index: usize = 0;
+
                 let mut most_recent_timestamp = None;
                 let samples_vec = sample_map
                     .remove(&stream_id)
@@ -209,6 +213,53 @@ impl XDFFile {
                             } else {
                                 let (old_i, old_timestamp) = most_recent_timestamp.unwrap(); // TODO this panics if the first sample has no timestamp. What do?
                                 Some(old_timestamp + ((i - old_i) as f64 / srate))
+                            };
+
+                            let timestamp = if let Some(ts) = timestamp {
+                                if !stream_offsets.is_empty() {
+                                    // TODO add clock offset to timestamp
+
+                                    let time_or_nan = |i| {
+                                        stream_offsets
+                                            .get(i + 1)
+                                            .map_or(f64::NAN, |c: &ClockOffsetChunk| c.collection_time)
+                                        //use NaN to break out of the loop below in case we've gone out of bounds
+                                        // this avoids an infinite loop in the unusual case where all clock offsets are newer than the newest timestamp.
+                                    };
+
+                                    // ensure clock offset at offset_index is older than the current timestamp
+                                    while ts > time_or_nan(offset_index) {
+                                        offset_index += 1;
+                                    }
+
+                                    // TODO verify this somehow
+                                    // get the most recent offset before the current timestamp
+                                    let last_offset =
+                                        stream_offsets.get(offset_index).or_else(|| stream_offsets.last());
+
+                                    // and the clock offset which comes next
+                                    let next_offset =
+                                        stream_offsets.get(offset_index + 1).or_else(|| stream_offsets.last());
+
+                                    let interpolated = if let (Some(l), Some(n)) = (last_offset, next_offset) {
+                                        // most cases will fall into this
+                                        // a * (1-x) + b * x
+
+                                        let dt = n.collection_time - l.collection_time;
+
+                                        let t_normalised = (ts - l.collection_time) / dt;
+
+                                        l.offset_value * (1.0 - t_normalised) + n.offset_value * t_normalised
+                                    } else {
+                                        last_offset.or(next_offset).map_or(0.0, |c| c.offset_value)
+                                    };
+
+                                    Some(ts + interpolated)
+                                } else {
+                                    timestamp //Some but there are no offsets
+                                }
+                            } else {
+                                timestamp //None
                             };
 
                             Sample {
