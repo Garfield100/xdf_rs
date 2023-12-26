@@ -47,13 +47,6 @@ pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<St
         .to_string())
 }
 
-pub(crate) fn opt_string_to_f64(opt_string: Option<String>) -> Result<Option<f64>> {
-    opt_string
-        .map(|s| s.parse::<f64>())
-        .transpose()
-        .map_err(Error::from)
-}
-
 pub(crate) fn extract_timestamp(raw_chunk: &RawChunk, offset: &mut usize) -> Option<f64> {
     let timestamp: Option<f64>;
     if raw_chunk.content_bytes[*offset] == 8 {
@@ -158,18 +151,4 @@ fn test_get_text_from_child_empty_child() {
 
     let result = get_text_from_child(&root, "child");
     assert!(result.is_err());
-}
-
-#[test]
-fn test_opt_string_to_f64_some() {
-    let opt_string = Some("3.14".to_string());
-    let result = opt_string_to_f64(opt_string);
-    assert_eq!(result.unwrap(), Some(3.14));
-}
-
-#[test]
-fn test_opt_string_to_f64_none() {
-    let opt_string = None;
-    let result = opt_string_to_f64(opt_string);
-    assert_eq!(result.unwrap(), None);
 }

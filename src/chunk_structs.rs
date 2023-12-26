@@ -57,7 +57,6 @@ pub(crate) struct StreamHeaderChunkInfo {
 
     pub name: Option<String>,
     pub r#type: Option<String>, // "type" is obviously a reserved keyword but can be escaped using r#
-    pub desc: Option<Element>,
 }
 
 #[derive(Debug)]
@@ -84,21 +83,9 @@ pub(crate) struct ClockOffsetChunk {
 #[derive(Debug)]
 pub(crate) struct BoundaryChunk {}
 
-//TODO: check what fields are and are not really mandatory
-//If we don't have first or last timestamps given, is it ok if we instead
-//determine those ourselves?
-#[derive(Debug)]
-pub(crate) struct StreamFooterChunkInfo {
-    pub first_timestamp: Option<f64>,
-    pub last_timestamp: Option<f64>,
-    pub sample_count: u64,
-    pub measured_srate: Option<f64>,
-}
-
 #[derive(Debug)]
 pub(crate) struct StreamFooterChunk {
     pub stream_id: u32,
-    pub info: StreamFooterChunkInfo,
     pub xml: Element,
 }
 

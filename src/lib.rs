@@ -34,6 +34,7 @@ type StreamID = u32;
 // xdf file struct
 #[derive(Debug)]
 pub struct XDFFile {
+    pub version: f32,
     pub header: xmltree::Element,
     pub streams: HashMap<u32, Stream>,
 }
@@ -118,7 +119,7 @@ impl XDFFile {
                         Ok(clock_offset_chunk)
                     }
                     Tag::Boundary => Ok(Chunk::Boundary(BoundaryChunk {})),
-                    Tag::StreamFooter => parse_stream_footer(raw_chunk, &stream_num_samples_map, &stream_info_map),
+                    Tag::StreamFooter => parse_stream_footer(raw_chunk),
                 }
             })
             .filter_map(|chunk_res| {
@@ -155,7 +156,9 @@ impl XDFFile {
                 },
             );
 
+        let version;
         let file_header_xml: xmltree::Element = if let Some(c) = file_header_chunk {
+            version = c.version;
             c.xml
         } else {
             bail!(ErrorKind::MissingFileHeaderError);
@@ -199,7 +202,7 @@ impl XDFFile {
                 let mut offset_index: usize = 0;
 
                 let mut most_recent_timestamp = None;
-                let samples_vec = sample_map
+                let samples_vec: Vec<Sample> = sample_map
                     .remove(&stream_id)
                     .unwrap_or_default() // stream could have no samples
                     .into_iter()
@@ -272,6 +275,30 @@ impl XDFFile {
                     })
                     .collect();
 
+                let measured_srate = if stream_header.info.nominal_srate.is_some() {
+                    // nominal_srate is given as "a floating point number in Hertz. If the stream
+                    // has an irregular sampling rate (that is, the samples are not spaced evenly in
+                    // time, for example in an event stream), this value must be 0."
+                    // we use None instead of 0.
+
+                    let first_timestamp: Option<f64> = samples_vec.first().and_then(|s| s.timestamp);
+                    let last_timestamp: Option<f64> = samples_vec.last().and_then(|s| s.timestamp);
+
+                    if let (num_samples, Some(first_timestamp), Some(last_timestamp)) =
+                        (samples_vec.len(), first_timestamp, last_timestamp)
+                    {
+                        if num_samples == 0 {
+                            None // don't divide by zero :)
+                        } else {
+                            Some((last_timestamp - first_timestamp) / num_samples as f64)
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 let stream = Stream {
                     stream_id,
                     channel_count: stream_header.info.channel_count,
@@ -282,6 +309,7 @@ impl XDFFile {
                     r#type,
                     stream_header: stream_header.xml.clone(),
                     stream_footer: stream_footer.map(|s| s.xml.clone()),
+                    measured_srate,
                     samples: samples_vec,
                 };
 
@@ -294,6 +322,7 @@ impl XDFFile {
         let streams: HashMap<u32, Stream> = streams_res?;
 
         Ok(Self {
+            version,
             header: file_header_xml,
             streams,
         })

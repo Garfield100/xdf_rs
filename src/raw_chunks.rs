@@ -9,7 +9,7 @@ use std::{collections::HashMap, io::Read};
 use crate::{
     chunk_structs::*,
     errors::*,
-    util::{extract_timestamp, get_text_from_child, opt_string_to_f64},
+    util::{extract_timestamp, get_text_from_child},
     Format, Sample, Values,
 };
 
@@ -120,9 +120,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
 // yes these are ugly, they were extracted by refactoring
 #[inline]
 pub(crate) fn parse_stream_footer(
-    raw_chunk: RawChunk,
-    stream_num_samples_map: &HashMap<u32, u64>,
-    stream_info_map: &HashMap<u32, StreamHeaderChunkInfo>,
+    raw_chunk: RawChunk
 ) -> Result<Chunk> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
@@ -132,47 +130,9 @@ pub(crate) fn parse_stream_footer(
             Err(err) => Err(err).chain_err(|| ErrorKind::ParseChunkError)?,
         }
     };
-    let first_timestamp_str = get_text_from_child(&root, "first_timestamp").ok();
-    let last_timestamp_str = get_text_from_child(&root, "last_timestamp").ok();
-    let measured_srate_str = get_text_from_child(&root, "measured_srate").ok();
-    let first_timestamp = opt_string_to_f64(first_timestamp_str)?;
-    let last_timestamp = opt_string_to_f64(last_timestamp_str)?;
-    let stream_info = stream_info_map.get(&stream_id).unwrap();
 
-    let measured_srate = if stream_info.nominal_srate.is_some() {
-        Some(opt_string_to_f64(measured_srate_str)?.unwrap_or_else(|| {
-            // measured_srate is missing, so we calculate it ourselves
-
-            // nominal_srate is given as "a floating point number in Hertz. If the stream
-            // has an irregular sampling rate (that is, the samples are not spaced evenly in
-            // time, for example in an event stream), this value must be 0."
-
-            if let (Some(num_samples), Some(first_timestamp), Some(last_timestamp)) =
-                (stream_num_samples_map.get(&stream_id), first_timestamp, last_timestamp)
-            {
-                if *num_samples == 0 {
-                    0.0 // don't divide by zero :)
-                } else {
-                    (last_timestamp - first_timestamp) / *num_samples as f64
-                }
-            } else {
-                0.0
-            }
-        }))
-    } else {
-        None
-    };
-    let info = StreamFooterChunkInfo {
-        first_timestamp,
-        last_timestamp,
-        sample_count: get_text_from_child(&root, "sample_count")?
-            .parse()
-            .chain_err(|| ErrorKind::BadXMLElementError("sample_count".to_string()))?,
-        measured_srate,
-    };
     let stream_footer_chunk = Chunk::StreamFooter(StreamFooterChunk {
         stream_id,
-        info,
         xml: root,
     });
     Ok(stream_footer_chunk)
@@ -396,7 +356,6 @@ pub(crate) fn parse_stream_header(
             invalid => bail!(Error::from(format!("Invalid stream channel format \"{}\"", invalid))
                 .chain_err(|| ErrorKind::BadXMLElementError("channel_format".to_string()))),
         },
-        desc: root.get_child("desc").cloned(),
     };
     stream_info_map.insert(stream_id, info.clone());
     let stream_header_chunk = StreamHeaderChunk {

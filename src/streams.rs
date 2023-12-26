@@ -23,12 +23,14 @@ pub struct Stream {
     pub nominal_srate: Option<f64>, //a mandatory field but we replace zero with None
     pub format: Format,
 
-    // optional fields
+    // optional fields:
     pub name: Option<Rc<str>>,
     pub r#type: Option<Rc<str>>,
 
-    pub stream_header: xmltree::Element, //also contains desc
+    pub stream_header: xmltree::Element, //contains desc
     pub stream_footer: Option<xmltree::Element>,
+
+    pub measured_srate: Option<f64>,
 
     pub samples: Vec<Sample>,
 }
