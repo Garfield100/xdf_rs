@@ -17,8 +17,6 @@ use crate::{Format, Sample};
 
 #[derive(Debug)]
 pub struct Stream {
-    pub stream_id: u32, // TODO only used internally to match stream headers, footers, and samples. Doesn't need to be public
-
     pub channel_count: u32,
     pub nominal_srate: Option<f64>, //a mandatory field but we replace zero with None
     pub format: Format,

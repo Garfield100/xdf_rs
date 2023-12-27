@@ -300,7 +300,6 @@ impl XDFFile {
                 };
 
                 let stream = Stream {
-                    stream_id,
                     channel_count: stream_header.info.channel_count,
                     nominal_srate: stream_header.info.nominal_srate,
                     format: stream_header.info.channel_format,
