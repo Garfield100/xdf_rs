@@ -13,55 +13,54 @@ use crate::{
     Format, Sample, Values,
 };
 
+// this saves us some allocations.
+// Unfortunately there is no cleaner way than a loop that I know of.
+macro_rules! exact_byte_slice {
+    ($iter:expr, $len:expr) => {{
+        let mut slice = [0; $len];
+        for i in 0..$len {
+            match $iter.next() {
+                Some(value) => slice[i] = value,
+                None => bail!(ErrorKind::ReadChunkError),
+            }
+        }
+        slice
+    }};
+}
+
+
+
 pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
 
-    let mut content_iter = file_bytes.iter().copied().enumerate();
+    let mut content_iter = file_bytes.iter().copied();
 
-    for _ in 0..4 {
-        let (index, byte) = content_iter.next().ok_or(ErrorKind::NoMagicNumberError)?;
-        if byte != "XDF:".as_bytes()[index] {
-            bail!(ErrorKind::NoMagicNumberError);
-        }
+    let magic_number = "XDF:".as_bytes();
+    let file_start: Vec<u8> = content_iter.by_ref().take(magic_number.len()).collect();
+
+    if file_start != magic_number {
+        bail!(ErrorKind::NoMagicNumberError);
     }
 
     while let Some(num_length_bytes) = content_iter.next() {
-        let mut chunk_length: u64;
-        match num_length_bytes.1 {
-            1 => chunk_length = content_iter.next().unwrap().1 as u64,
-            4 | 8 => {
-                let mut bytes: Vec<u8> = vec![0; num_length_bytes.1 as usize];
-                for i in 0..bytes.len() {
-                    if let Some(next_byte) = content_iter.next() {
-                        bytes[i] = next_byte.1;
-                    } else {
-                        bail!(ErrorKind::ReadChunkError);
-                    }
-                }
-
-                chunk_length = match num_length_bytes.1 {
-                    4 => LittleEndian::read_u32(&bytes) as u64,
-                    8 => LittleEndian::read_u64(&bytes),
-                    _ => unreachable!(),
-                }
+        let chunk_length: usize = match num_length_bytes {
+            1 => content_iter.next().unwrap() as usize,
+            4 => {
+                let length_bytes: [u8; 4] = exact_byte_slice!(content_iter.by_ref(), 4);
+                LittleEndian::read_u32(&length_bytes) as usize
             }
-
+            8 => {
+                let length_bytes: [u8; 8] = exact_byte_slice!(content_iter.by_ref(), 8);
+                LittleEndian::read_u64(&length_bytes) as usize
+            }
             _ => {
-                bail!(ErrorKind::InvalidNumCountBytes(num_length_bytes.1));
+                bail!(ErrorKind::InvalidNumCountBytes(num_length_bytes));
             }
-        }
+        };
 
-        let mut tag_bytes: [u8; 2] = [0; 2];
-        for i in 0..tag_bytes.len() {
-            tag_bytes[i] = {
-                let val = content_iter.next();
-                match val {
-                    Some(val) => val.1,
-                    None => bail!(ErrorKind::ReadChunkError),
-                }
-            };
-        }
+        // we could use take() here but this way saves us an allocation
+        let tag_bytes: [u8; 2] = exact_byte_slice!(content_iter.by_ref(), 2);
 
         let chunk_tag_num = LittleEndian::read_u16(&tag_bytes);
 
@@ -69,7 +68,8 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
             1 => {
                 if file_header_found {
                     // more than one FileHeader found
-                    return Err("More than one FileHeaders found.".into());
+                    warn!("Invalid: more than one FileHeader found. Returning what has been read so far.");
+                    return Ok(raw_chunks);
                 }
                 file_header_found = true;
                 Tag::FileHeader
@@ -83,23 +83,14 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
         };
 
         //subtract the two tag bytes for the content length
-        chunk_length -= 2;
+        let remaining_chunk_length = chunk_length - 2;
 
-        // if this cast fails the chunk is unreasonably large
-        let chunk_length: usize = chunk_length as usize;
+        let chunk_bytes: Vec<u8> = content_iter.by_ref().take(remaining_chunk_length).collect();
 
-        let mut chunk_bytes: Vec<u8> = vec![0; chunk_length];
-        for i in 0..chunk_length {
-            chunk_bytes[i] = {
-                match content_iter.next() {
-                    Some(val) => val.1,
-                    None => {
-                        // File ended before chunk was finished.
-                        warn!("File ended mid-chunk, something is likely corrupted.");
-                        return Ok(raw_chunks);
-                    }
-                }
-            };
+        if chunk_bytes.len() != remaining_chunk_length {
+            // File ended before chunk was finished.
+            warn!("File ended mid-chunk, something is likely corrupted. Returning what has been read so far.");
+            return Ok(raw_chunks);
         }
 
         let raw_chunk = RawChunk {
@@ -119,9 +110,7 @@ pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
 
 // yes these are ugly, they were extracted by refactoring
 #[inline]
-pub(crate) fn parse_stream_footer(
-    raw_chunk: RawChunk
-) -> Result<Chunk> {
+pub(crate) fn parse_stream_footer(raw_chunk: RawChunk) -> Result<Chunk> {
     let id_bytes = &raw_chunk.content_bytes[..4];
     let stream_id: u32 = LittleEndian::read_u32(id_bytes);
     let root = {
@@ -131,10 +120,7 @@ pub(crate) fn parse_stream_footer(
         }
     };
 
-    let stream_footer_chunk = Chunk::StreamFooter(StreamFooterChunk {
-        stream_id,
-        xml: root,
-    });
+    let stream_footer_chunk = Chunk::StreamFooter(StreamFooterChunk { stream_id, xml: root });
     Ok(stream_footer_chunk)
 }
 
