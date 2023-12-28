@@ -4,11 +4,17 @@
 // #![warn(missing_docs)]
 #![crate_type = "lib"]
 
+//! [![github]](https://github.com/Garfield100/xdf_rs)
+//!
+//! [github]: https://img.shields.io/badge/github-9090ff?style=for-the-badge&logo=github&labelColor=505050
+//!
+
 //! Read XDF files
 //!
-//! This library provides a way to read [`XDF files`] which are up to the SCCN specifications.
+//! [`XDF format`]: https://github.com/sccn/xdf/wiki/Specifications
 //!
-//! [`XDF files`]: https://github.com/sccn/xdf/wiki/Specifications
+//! This library provides a way to read files in the [`XDF format`] as specified by SCCN.
+//!
 
 use std::{collections::HashMap, rc::Rc};
 
@@ -36,7 +42,7 @@ type StreamID = u32;
 pub struct XDFFile {
     pub version: f32,
     pub header: xmltree::Element,
-    pub streams: HashMap<u32, Stream>,
+    pub streams: HashMap<StreamID, Stream>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -73,14 +79,15 @@ impl XDFFile {
         let raw_chunks = read_to_raw_chunks(bytes)?;
 
         //map channel IDs to format and channel counts from streamheader chunks to
-        //be able to parse sampole chunks
-        let mut stream_info_map = HashMap::<u32, StreamHeaderChunkInfo>::new();
-        let mut stream_num_samples_map = HashMap::<u32, u64>::new();
+        //be able to parse sample chunks
+        let mut stream_info_map = HashMap::<StreamID, StreamHeaderChunkInfo>::new();
+        let mut stream_num_samples_map = HashMap::<StreamID, u64>::new();
         let mut file_header_chunk: Option<FileHeaderChunk> = None;
         let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
         let mut stream_footer_chunks: Vec<StreamFooterChunk> = Vec::new();
         let mut clock_offsets = HashMap::<StreamID, Vec<ClockOffsetChunk>>::new();
 
+        // the sample_map maps stream IDs to a vector of iterators which each iterate over one chunk's samples
         let mut sample_map = raw_chunks
             .into_iter()
             .map(|raw_chunk: RawChunk| -> Result<Chunk, crate::errors::Error> {
@@ -88,7 +95,9 @@ impl XDFFile {
                 //if the chunk does not have a stream ID we can just ignore these. All
                 //chunk content bytes are longer than 4 bytes anyway.
                 let id_bytes = &raw_chunk.content_bytes[..4];
-                let stream_id: u32 = LittleEndian::read_u32(id_bytes);
+                let stream_id: StreamID = LittleEndian::read_u32(id_bytes);
+
+                // sort chunks into various maps and vectors:
                 match raw_chunk.tag {
                     Tag::FileHeader => {
                         let root = Element::parse(raw_chunk.content_bytes.as_slice())?;
@@ -136,7 +145,7 @@ impl XDFFile {
                         stream_footer_chunks.push(c);
                         None
                     }
-                    Ok(Chunk::Samples(c)) => Some(c),
+                    Ok(Chunk::Samples(c)) => Some(c), // pass samples through to the fold
                     Ok(Chunk::ClockOffset(c)) => {
                         clock_offsets.entry(c.stream_id).or_default().push(c);
 
@@ -150,7 +159,7 @@ impl XDFFile {
             })
             .fold(
                 HashMap::new(),
-                |mut map: HashMap<u32, Vec<std::vec::IntoIter<Sample>>>, chunk| {
+                |mut map: HashMap<StreamID, Vec<std::vec::IntoIter<Sample>>>, chunk| {
                     map.entry(chunk.stream_id).or_default().push(chunk.samples.into_iter());
                     map
                 },
@@ -164,11 +173,11 @@ impl XDFFile {
             bail!(ErrorKind::MissingFileHeaderError);
         };
 
-        let streams_res: Result<HashMap<u32, Stream>, crate::errors::Error> = {
-            let stream_header_map: HashMap<u32, StreamHeaderChunk> =
+        let streams_res: Result<HashMap<StreamID, Stream>, crate::errors::Error> = {
+            let stream_header_map: HashMap<StreamID, StreamHeaderChunk> =
                 stream_header_chunks.into_iter().map(|s| (s.stream_id, s)).collect();
 
-            let stream_footer_map: HashMap<u32, StreamFooterChunk> =
+            let stream_footer_map: HashMap<StreamID, StreamFooterChunk> =
                 stream_footer_chunks.into_iter().map(|s| (s.stream_id, s)).collect();
 
             // TODO we might want to reduce this to a log warning to be more error tolerant in case a recording stopped unexpectedly
@@ -185,7 +194,7 @@ impl XDFFile {
                     .ok_or_else(|| errors::ErrorKind::MissingStreamHeaderError(stream_id))?;
             }
 
-            let mut streams_map: HashMap<u32, Stream> = HashMap::new();
+            let mut streams_map: HashMap<StreamID, Stream> = HashMap::new();
 
             for (&stream_id, stream_header) in &stream_header_map {
                 let stream_footer = stream_footer_map.get(&stream_id);
@@ -318,7 +327,7 @@ impl XDFFile {
             Ok(streams_map)
         };
 
-        let streams: HashMap<u32, Stream> = streams_res?;
+        let streams: HashMap<StreamID, Stream> = streams_res?;
 
         Ok(Self {
             version,

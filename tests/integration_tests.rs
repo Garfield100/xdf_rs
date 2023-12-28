@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use xdf::{Format, Values, XDFFile};
 
-const EPSILON: f64 = 0.000000000000001;
+const EPSILON: f64 = 1E-15;
 
 #[test]
 fn read_minimal_xdf() {

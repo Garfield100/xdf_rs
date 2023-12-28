@@ -15,7 +15,6 @@ thiserror = "1.0.38"
 xmltree = "0.10.3"
 
 [dev-dependencies]
-assert_fs = "1.0.10"
 glassbench = "0.3.5"
 
 [profile.profiler]

@@ -28,8 +28,6 @@ macro_rules! exact_byte_slice {
     }};
 }
 
-
-
 pub(crate) fn read_to_raw_chunks(file_bytes: &[u8]) -> Result<Vec<RawChunk>> {
     let mut raw_chunks: Vec<RawChunk> = Vec::new();
     let mut file_header_found: bool = false;
@@ -159,6 +157,7 @@ pub(crate) fn parse_samples(
         Format::Float64 => Some(8),
         Format::String => None,
     };
+
     let mut offset: usize = 4 + 1 + *num_samples_byte_num as usize;
     let mut samples: Vec<Sample> = Vec::with_capacity(num_samples as usize);
     if let Some(type_size) = type_size {
@@ -170,107 +169,41 @@ pub(crate) fn parse_samples(
             // realign the whole slice directly
             let values_bytes =
                 &raw_chunk.content_bytes[offset..offset + (type_size as usize * stream_info.channel_count as usize)];
+
+            // this macro is used to cast many values at once instead of iterating over them as this is much faster
+            // the core issue is that we need to cast a slice of bytes to a slice of something else. This requires alignment.
+            macro_rules! cast_values {
+                ($type:ty, $variant:path) => {{
+                    // create a vector of the correct type to get an aligned pointer
+                    let mut vec_for_alignment: Vec<$type> =
+                        vec![0 as $type; values_bytes.len() / std::mem::size_of::<$type>()];
+
+                    // cast the &mut [$type] to a &mut [u8]
+                    let vec_for_alignment_as_bytes =
+                        bytemuck::cast_slice_mut::<$type, u8>(vec_for_alignment.as_mut_slice());
+
+                    // copy the read bytes into the vector slice
+                    vec_for_alignment_as_bytes.copy_from_slice(values_bytes);
+
+                    // cast the byte slice back into the correct type
+                    let vals = bytemuck::cast_slice::<u8, $type>(vec_for_alignment_as_bytes).to_vec();
+
+                    $variant(vals)
+                }};
+            }
+
             let values: Values = match stream_info.channel_format {
                 Format::Int8 => {
                     let vals = bytemuck::cast_slice::<u8, i8>(values_bytes).to_vec();
 
                     Values::Int8(vals)
                 }
-                Format::Int16 => {
-                    let mut vec_for_alignment: Vec<i16> = vec![0; values_bytes.len() / 2];
+                Format::Int16 => cast_values!(i16, Values::Int16),
+                Format::Int32 => cast_values!(i32, Values::Int32),
+                Format::Int64 => cast_values!(i64, Values::Int64),
+                Format::Float32 => cast_values!(f32, Values::Float32),
+                Format::Float64 => cast_values!(f64, Values::Float64),
 
-                    #[allow(unused_mut)] // marking the variables as mut because they are mutated in unsafe code
-                    let mut vec_for_alignment_as_bytes =
-                        bytemuck::cast_slice::<i16, u8>(vec_for_alignment.as_mut_slice());
-                    let mutable_bytes;
-                    unsafe {
-                        mutable_bytes = slice::from_raw_parts_mut(
-                            vec_for_alignment_as_bytes.as_ptr() as *mut _,
-                            vec_for_alignment_as_bytes.len(),
-                        );
-                        mutable_bytes.copy_from_slice(values_bytes);
-                    }
-
-                    let vals = bytemuck::cast_slice::<u8, i16>(mutable_bytes).to_vec();
-
-                    Values::Int16(vals)
-                }
-                Format::Int32 => {
-                    let mut vec_for_alignment: Vec<i32> = vec![0; values_bytes.len() / 4];
-
-                    #[allow(unused_mut)] // marking the variables as mut because they are mutated in unsafe code
-                    let mut vec_for_alignment_as_bytes =
-                        bytemuck::cast_slice::<i32, u8>(vec_for_alignment.as_mut_slice());
-                    let mutable_bytes;
-                    unsafe {
-                        mutable_bytes = slice::from_raw_parts_mut(
-                            vec_for_alignment_as_bytes.as_ptr() as *mut _,
-                            vec_for_alignment_as_bytes.len(),
-                        );
-                        mutable_bytes.copy_from_slice(values_bytes);
-                    }
-
-                    let vals = bytemuck::cast_slice::<u8, i32>(mutable_bytes).to_vec();
-
-                    Values::Int32(vals)
-                }
-                Format::Int64 => {
-                    let mut vec_for_alignment: Vec<i64> = vec![0; values_bytes.len() / 8];
-
-                    #[allow(unused_mut)] // marking the variables as mut because they are mutated in unsafe code
-                    let mut vec_for_alignment_as_bytes =
-                        bytemuck::cast_slice::<i64, u8>(vec_for_alignment.as_mut_slice());
-                    let mutable_bytes;
-                    unsafe {
-                        mutable_bytes = slice::from_raw_parts_mut(
-                            vec_for_alignment_as_bytes.as_ptr() as *mut _,
-                            vec_for_alignment_as_bytes.len(),
-                        );
-                        mutable_bytes.copy_from_slice(values_bytes);
-                    }
-
-                    let vals = bytemuck::cast_slice::<u8, i64>(mutable_bytes).to_vec();
-
-                    Values::Int64(vals)
-                }
-                Format::Float32 => {
-                    let mut vec_for_alignment: Vec<f32> = vec![0.0; values_bytes.len() / 4];
-
-                    #[allow(unused_mut)] // marking the variables as mut because they are mutated in unsafe code
-                    let mut vec_for_alignment_as_bytes =
-                        bytemuck::cast_slice::<f32, u8>(vec_for_alignment.as_mut_slice());
-                    let mutable_bytes;
-                    unsafe {
-                        mutable_bytes = slice::from_raw_parts_mut(
-                            vec_for_alignment_as_bytes.as_ptr() as *mut _,
-                            vec_for_alignment_as_bytes.len(),
-                        );
-                        mutable_bytes.copy_from_slice(values_bytes);
-                    }
-
-                    let vals = bytemuck::cast_slice::<u8, f32>(mutable_bytes).to_vec();
-
-                    Values::Float32(vals)
-                }
-                Format::Float64 => {
-                    let mut vec_for_alignment: Vec<f64> = vec![0.0; values_bytes.len() / 8];
-
-                    #[allow(unused_mut)] // marking the variables as mut because they are mutated in unsafe code
-                    let mut vec_for_alignment_as_bytes =
-                        bytemuck::cast_slice::<f64, u8>(vec_for_alignment.as_mut_slice());
-                    let mutable_bytes;
-                    unsafe {
-                        mutable_bytes = slice::from_raw_parts_mut(
-                            vec_for_alignment_as_bytes.as_ptr() as *mut _,
-                            vec_for_alignment_as_bytes.len(),
-                        );
-                        mutable_bytes.copy_from_slice(values_bytes);
-                    }
-
-                    let vals = bytemuck::cast_slice::<u8, f64>(mutable_bytes).to_vec();
-
-                    Values::Float64(vals)
-                }
                 Format::String => unreachable!(),
             };
             offset += type_size as usize * stream_info.channel_count as usize;
