@@ -1,5 +1,6 @@
 //! Errors that can occur when parsing a chunk
-use error_chain::error_chain;
+use std::{rc::Rc, sync::Arc};
+use thiserror::Error;
 
 // #[derive(Debug, Error)]
 // pub enum ParseChunkError {
@@ -17,67 +18,56 @@ use error_chain::error_chain;
 //     },
 // }
 
-error_chain! {
-    foreign_links {
-        TryFromSliceError(std::array::TryFromSliceError);
-        XMLParseError(xmltree::ParseError);
-        Utf8Error(std::str::Utf8Error);
-        IOError(std::io::Error);
-        ParseFloatError(std::num::ParseFloatError);
-    }
+#[derive(Debug, Error)]
+pub enum XdfError {
+    #[error("The XML element either does not exist or contains invalid or no data: {0}")]
+    BadXMLElementError(String),
 
-    errors {
-        /// relatively general error for when an XML element contains invalid data (e.g. a string when a float is expected) or is missing entirely.
-        BadXMLElementError (tag: String) {
-            description("The XML element either does not exist or contains invalid or no data")
-            display("The XML tag {0} either does not exist or contains invalid or no data", tag)
-        }
+    #[error("Version {0} is not supported")]
+    VersionNotSupportedError(f32),
 
-        /// the version of the XDF file is not supported. Currently, only version 1.0 is supported.
-        VersionNotSupportedError(version: f32) {
-            description("Version not supported")
-            display("Version {} is not supported", version)
-        }
+    #[error("Error parsing chunk")]
+    ParseChunkError,
 
-        ParseChunkError{
-            description("Error parsing chunk")
-            display("Error parsing chunk")
-        }
+    #[error("Error reading chunk")]
+    ReadChunkError,
 
-        ReadChunkError{
-            description("Error reading chunk")
-            display("Error reading chunk")
-        }
+    #[error("Could not find file header chunk")]
+    MissingFileHeaderError,
 
-        MissingFileHeaderError {
-            description("Could not find file header chunk")
-            display("Could not find file header chunk")
-        }
+    #[error("Multiple file header chunks found")]
+    MultipleFileHeaderError,
 
-        MissingStreamHeaderError(stream_id: u32) {
-            description("Could not find stream header chunk")
-            display("Could not find stream header chunk for stream id {}", stream_id)
-        }
+    #[error("Could not find stream header chunk for stream id {0}")]
+    MissingStreamHeaderError(u32),
 
-        MissingStreamFooterChunk(stream_id: u32) {
-            description("Could not find stream footer chunk")
-            display("Could not find stream footer chunk for stream id {}", stream_id)
-        }
+    #[error("Could not find stream footer chunk for stream id {0}")]
+    MissingStreamFooterChunk(u32),
 
-        NoMagicNumberError {
-            description("File does not begin with the bytes 'XDF:'")
-            display("File does not begin with magic number")
-        }
+    #[error("File does not begin with magic number")]
+    NoMagicNumberError,
 
-        InvalidTagError(tag: u16) {
-            description("Invalid tag")
-            display("Invalid tag: {}", tag)
-        }
+    #[error("Invalid tag: {0}")]
+    InvalidTagError(u16),
 
-        InvalidNumCountBytes(num_count_bytes: u8) {
-            description("Invalid number of count bytes. Should be 1, 4, or 8")
-            display("Invalid number of count bytes. Expected 1, 4, or 8, but got {}", num_count_bytes)
-        }
+    #[error("Invalid number of count bytes. Expected 1, 4, or 8, but got {0}")]
+    InvalidNumCountBytes(u8),
 
-    }
+    #[error(transparent)]
+    TryFromSliceError(#[from] std::array::TryFromSliceError),
+
+    #[error(transparent)]
+    XMLParseError(#[from] xmltree::ParseError),
+
+    #[error(transparent)]
+    Utf8Error(#[from] std::str::Utf8Error),
+
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+
+    #[error(transparent)]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    NomErr(#[from] nom::Err<nom::error::Error<Arc<[u8]>>>),
 }

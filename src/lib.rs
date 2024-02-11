@@ -1,4 +1,4 @@
-// #![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 #![deny(nonstandard_style)]
 #![warn(array_into_iter)]
 // #![warn(missing_docs)]
@@ -16,25 +16,24 @@
 //! This library provides a way to read files in the [`XDF format`] as specified by SCCN.
 //!
 
+use std::sync::Arc;
 use std::{collections::HashMap, rc::Rc};
 
 mod chunk_structs;
 mod errors;
-mod raw_chunks;
+
 mod streams;
 mod util;
 
-use byteorder::{ByteOrder, LittleEndian};
 use chunk_structs::*;
-use error_chain::bail;
-use errors::ErrorKind;
-// use errors::ParseChunkError;
-use raw_chunks::*;
+use errors::XdfError;
+use log::warn;
 use streams::Stream;
-use util::*;
-use xmltree::Element;
 
 use crate::chunk_structs::Chunk;
+
+pub(crate) mod parsers;
+use crate::parsers::chunk_parsers::chunk_root;
 
 type StreamID = u32;
 // xdf file struct
@@ -42,7 +41,7 @@ type StreamID = u32;
 pub struct XDFFile {
     pub version: f32,
     pub header: xmltree::Element,
-    pub streams: HashMap<StreamID, Stream>,
+    pub streams: Vec<Stream>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -75,89 +74,57 @@ pub struct Sample {
 }
 
 impl XDFFile {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::errors::Error> {
-        let raw_chunks = read_to_raw_chunks(bytes)?;
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, XdfError> {
+        let (input, chunks) = chunk_root(bytes).map_err(|e| match e {
+            // we have to map the error to use Arc instead of slice because error_chain doesn't like lifetimes in external errors
+            nom::Err::Incomplete(n) => nom::Err::Incomplete(n),
+            nom::Err::Error(nom::error::Error { input, code }) => nom::Err::Error(nom::error::Error {
+                input: Arc::from(input.to_owned()),
+                code,
+            }),
+            nom::Err::Failure(nom::error::Error { input, code }) => nom::Err::Failure(nom::error::Error {
+                input: Arc::from(input.to_owned()),
+                code,
+            }),
+        })?;
 
-        //map channel IDs to format and channel counts from streamheader chunks to
-        //be able to parse sample chunks
-        let mut stream_info_map = HashMap::<StreamID, StreamHeaderChunkInfo>::new();
-        let mut stream_num_samples_map = HashMap::<StreamID, u64>::new();
+        if !input.is_empty() {
+            warn!("There are {} bytes left in the input after parsing.", input.len());
+        }
+
         let mut file_header_chunk: Option<FileHeaderChunk> = None;
         let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
         let mut stream_footer_chunks: Vec<StreamFooterChunk> = Vec::new();
         let mut clock_offsets = HashMap::<StreamID, Vec<ClockOffsetChunk>>::new();
 
         // the sample_map maps stream IDs to a vector of iterators which each iterate over one chunk's samples
-        let mut sample_map = raw_chunks
+        let mut sample_map = chunks
             .into_iter()
-            .map(|raw_chunk: RawChunk| -> Result<Chunk, crate::errors::Error> {
-                //stream IDs are always the first 4 bytes.
-                //if the chunk does not have a stream ID we can just ignore these. All
-                //chunk content bytes are longer than 4 bytes anyway.
-                let id_bytes = &raw_chunk.content_bytes[..4];
-                let stream_id: StreamID = LittleEndian::read_u32(id_bytes);
-
-                // sort chunks into various maps and vectors:
-                match raw_chunk.tag {
-                    Tag::FileHeader => {
-                        let root = Element::parse(raw_chunk.content_bytes.as_slice())?;
-                        let version = parse_version(&root)?;
-
-                        if version != 1.0 {
-                            return Err(ErrorKind::VersionNotSupportedError(version).into());
-                        }
-
-                        let file_header_chunk = FileHeaderChunk {
-                            version: parse_version(&root)?,
-                            xml: root,
-                        };
-
-                        Ok(Chunk::FileHeader(file_header_chunk))
-                    }
-                    Tag::StreamHeader => parse_stream_header(&raw_chunk, &mut stream_info_map),
-                    Tag::Samples => parse_samples(raw_chunk, &mut stream_num_samples_map, stream_id, &stream_info_map),
-                    Tag::ClockOffset => {
-                        let collection_time: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[4..12]).try_into()?);
-                        let offset_value: f64 = f64::from_le_bytes((&raw_chunk.content_bytes[12..20]).try_into()?);
-
-                        let clock_offset_chunk = Chunk::ClockOffset(ClockOffsetChunk {
-                            stream_id,
-                            collection_time,
-                            offset_value,
-                        });
-                        Ok(clock_offset_chunk)
-                    }
-                    Tag::Boundary => Ok(Chunk::Boundary(BoundaryChunk {})),
-                    Tag::StreamFooter => parse_stream_footer(raw_chunk),
-                }
-            })
             .filter_map(|chunk_res| {
                 match chunk_res {
-                    Ok(Chunk::FileHeader(c)) => {
+                    Chunk::FileHeader(c) => {
                         file_header_chunk = Some(c);
                         None
                     }
-                    Ok(Chunk::StreamHeader(c)) => {
+                    Chunk::StreamHeader(c) => {
                         stream_header_chunks.push(c);
                         None
                     }
-                    Ok(Chunk::StreamFooter(c)) => {
+                    Chunk::StreamFooter(c) => {
                         stream_footer_chunks.push(c);
                         None
                     }
-                    Ok(Chunk::Samples(c)) => Some(c), // pass samples through to the fold
-                    Ok(Chunk::ClockOffset(c)) => {
+                    Chunk::Samples(c) => Some(c), // pass only samples through to the fold
+                    Chunk::ClockOffset(c) => {
                         clock_offsets.entry(c.stream_id).or_default().push(c);
 
                         None
                     }
-                    Ok(Chunk::Boundary(_)) => None,
-                    Err(_err) => {
-                        None // TODO log error?
-                    }
+                    Chunk::Boundary(_) => None,
                 }
             })
             .fold(
+                // fold the samples into a map of stream IDs to a vector of iterators so we can merge them later
                 HashMap::new(),
                 |mut map: HashMap<StreamID, Vec<std::vec::IntoIter<Sample>>>, chunk| {
                     map.entry(chunk.stream_id).or_default().push(chunk.samples.into_iter());
@@ -170,31 +137,37 @@ impl XDFFile {
             version = c.version;
             c.xml
         } else {
-            bail!(ErrorKind::MissingFileHeaderError);
+            return Err(XdfError::MissingFileHeaderError); // this should already be covered by the nom parser
         };
 
-        let streams_res: Result<HashMap<StreamID, Stream>, crate::errors::Error> = {
+        let streams_res: Result<Vec<Stream>, XdfError> = {
             let stream_header_map: HashMap<StreamID, StreamHeaderChunk> =
                 stream_header_chunks.into_iter().map(|s| (s.stream_id, s)).collect();
 
             let stream_footer_map: HashMap<StreamID, StreamFooterChunk> =
                 stream_footer_chunks.into_iter().map(|s| (s.stream_id, s)).collect();
 
-            // TODO we might want to reduce this to a log warning to be more error tolerant in case a recording stopped unexpectedly
-            // check if all stream headers have a corresponding stream footer
-            for &stream_id in stream_footer_map.keys() {
-                stream_footer_map
-                    .get(&stream_id)
-                    .ok_or_else(|| errors::ErrorKind::MissingStreamFooterChunk(stream_id))?;
+            // this can happen if the recording stops unexpectedly. We allow this to be more error tolerant and not lose all experimental data.
+            for &stream_id in stream_header_map.keys() {
+                if let None = stream_footer_map.get(&stream_id) {
+                    warn!(
+                        "Stream header without corresponding stream footer for id: {}",
+                        stream_id
+                    );
+                }
             }
 
+            // this on the other hand is a bit weirder but again, we allow it to be more error tolerant
             for &stream_id in stream_footer_map.keys() {
-                stream_header_map
-                    .get(&stream_id)
-                    .ok_or_else(|| errors::ErrorKind::MissingStreamHeaderError(stream_id))?;
+                if let None = stream_header_map.get(&stream_id) {
+                    warn!(
+                        "Stream footer without corresponding stream header for id: {}",
+                        stream_id
+                    );
+                }
             }
 
-            let mut streams_map: HashMap<StreamID, Stream> = HashMap::new();
+            let mut streams_vec: Vec<Stream> = Vec::new();
 
             for (&stream_id, stream_header) in &stream_header_map {
                 let stream_footer = stream_footer_map.get(&stream_id);
@@ -309,6 +282,7 @@ impl XDFFile {
                 };
 
                 let stream = Stream {
+                    id: stream_id,
                     channel_count: stream_header.info.channel_count,
                     nominal_srate: stream_header.info.nominal_srate,
                     format: stream_header.info.channel_format,
@@ -321,13 +295,13 @@ impl XDFFile {
                     samples: samples_vec,
                 };
 
-                streams_map.insert(stream_id, stream);
+                streams_vec.push(stream);
             }
 
-            Ok(streams_map)
+            Ok(streams_vec)
         };
 
-        let streams: HashMap<StreamID, Stream> = streams_res?;
+        let streams = streams_res?;
 
         Ok(Self {
             version,

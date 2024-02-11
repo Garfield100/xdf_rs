@@ -22,23 +22,6 @@ pub(crate) struct FileHeaderChunk {
     pub xml: Element,
 }
 
-#[test]
-fn file_header_chunk() {
-    use crate::raw_chunks::read_to_raw_chunks;
-
-    let start_bytes: Vec<u8> = vec![b'X', b'D', b'F', b':', 1, 0x3A, 1, 0];
-    let xml_string = r#"<?xml version="1.0"?><info><version>1.0</version></info>"#;
-    let bytes: Vec<u8> = [start_bytes, xml_string.as_bytes().to_vec()].concat();
-
-    let res = read_to_raw_chunks(bytes.as_slice());
-
-    let chunks = res.unwrap();
-
-    assert_eq!(chunks.len(), 1);
-    assert!(matches!(chunks[0].tag, Tag::FileHeader));
-    assert_eq!(chunks[0].content_bytes.len(), 56);
-}
-
 // minimal tags in version 1.x:
 // channel count
 // nominal srate
@@ -89,7 +72,7 @@ pub(crate) struct StreamFooterChunk {
     pub xml: Element,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Tag {
     FileHeader,
     StreamHeader,
@@ -97,11 +80,4 @@ pub(crate) enum Tag {
     ClockOffset,
     Boundary,
     StreamFooter,
-}
-
-// TODO: ensure correct visibility
-#[derive(Debug)]
-pub(crate) struct RawChunk {
-    pub tag: Tag,
-    pub content_bytes: Vec<u8>,
 }

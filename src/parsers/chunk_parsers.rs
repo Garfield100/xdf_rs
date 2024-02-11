@@ -302,8 +302,8 @@ fn magic_number(input: &[u8]) -> IResult<&[u8], &[u8]> {
     context("magic_number", tag(b"XDF:"))(input)
 }
 
-// xdf file parser
-fn xdf_file(input: &[u8]) -> IResult<&[u8], Vec<Chunk>> {
+// parses the magic number, the file header, and then all the rest of the chunks. Returns a vector of chunks
+pub(crate) fn chunk_root(input: &[u8]) -> IResult<&[u8], Vec<Chunk>> {
     let stream_info_map: HashMap<u32, StreamHeaderChunkInfo> = HashMap::new();
     let cursed: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>> = Rc::new(RefCell::new(stream_info_map));
 
@@ -356,7 +356,7 @@ mod tests {
         // load minimal.xdf which is included in the repo
         let input = include_bytes!("../../tests/minimal.xdf");
 
-        let (rest, chunks) = xdf_file(input).unwrap();
+        let (rest, chunks) = chunk_root(input).unwrap();
 
         assert_eq!(rest, &[] as &[u8]);
         assert_eq!(chunks.len(), 15);
