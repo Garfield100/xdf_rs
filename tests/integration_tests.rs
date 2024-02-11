@@ -7,7 +7,7 @@ const EPSILON: f64 = 1E-15;
 #[test]
 fn read_minimal_xdf() {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    file_path.push("example-files/minimal.xdf");
+    file_path.push("tests/minimal.xdf");
     let bytes = fs::read(file_path).unwrap();
     let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
@@ -16,15 +16,15 @@ fn read_minimal_xdf() {
 
     assert_eq!(xdf_file.header.name, "info");
 
-    assert_eq!(xdf_file.streams.keys().len(), stream_ids.len());
-    let mut read_ids = xdf_file.streams.keys().map(|id| *id).collect::<Vec<u32>>();
+    assert_eq!(xdf_file.streams.len(), stream_ids.len());
+    let mut read_ids = xdf_file.streams.iter().map(|stream| stream.id).collect::<Vec<u32>>();
     let mut expected_ids = stream_ids.clone();
     read_ids.sort_unstable();
     expected_ids.sort_unstable();
     assert_eq!(read_ids.as_slice(), stream_ids);
 
-    let first_stream = xdf_file.streams.get(&stream_ids[0]).unwrap();
-    let _second_stream = xdf_file.streams.get(&stream_ids[1]).unwrap();
+    let first_stream = xdf_file.streams.iter().find(|s| s.id == expected_ids[0]).unwrap();
+    let _second_stream = xdf_file.streams.iter().find(|s| s.id == expected_ids[1]).unwrap();
 
     // timestamps minus the clock offsets (always -0.1 in this file)
     let expected_first_samples = vec![
@@ -69,14 +69,18 @@ fn read_minimal_xdf() {
     assert_eq!(
         first_stream.samples.len(),
         expected_first_samples.len(),
-        "unexpected number of samples in first stream"
+        "unexpected number of samples in first stream. Expected {}, got {}",
+        expected_first_samples.len(),
+        first_stream.samples.len()
     );
     assert!(
         match first_stream.format {
             Format::Int16 => true,
             _ => false,
         },
-        "unexpected format of first stream"
+        "unexpected format of first stream. Expected {:?}, got {:?}",
+        Format::Int16,
+        first_stream.format
     );
 
     // compare only values
