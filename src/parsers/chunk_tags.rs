@@ -1,6 +1,14 @@
-use nom::{self, combinator::value, bytes::complete::tag, IResult, Parser, branch::alt};
+use nom::{self, bytes::complete::tag, combinator::value, IResult, Parser};
 
 use crate::chunk_structs::Tag;
+
+//tags:
+// 1: FileHeader (one per file)
+// 2: StreamHeader (one per stream)
+// 3: Samples (zero or more per stream)
+// 4: ClockOffset (zero or more per stream)
+// 5: Boundary (zero or more per file)
+// 6: StreamFooter (one per stream)
 
 // FileHeader tag parser
 pub(crate) fn file_header_tag(input: &[u8]) -> IResult<&[u8], Tag> {
@@ -30,17 +38,4 @@ pub(crate) fn boundary_tag(input: &[u8]) -> IResult<&[u8], Tag> {
 // StreamFooter tag parser
 pub(crate) fn stream_footer_tag(input: &[u8]) -> IResult<&[u8], Tag> {
     value(Tag::StreamFooter, tag([6, 0])).parse(input)
-}
-
-// chunk tag parser
-pub(crate) fn chunk_tag(input: &[u8]) -> IResult<&[u8], Tag> {
-    alt((
-        file_header_tag,
-        stream_header_tag,
-        samples_tag,
-        clock_offset_tag,
-        boundary_tag,
-        stream_footer_tag,
-    ))
-    .parse(input)
 }

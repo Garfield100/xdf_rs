@@ -1,4 +1,9 @@
-use nom::{combinator::value, bytes::complete::tag, number::complete::{le_u8, le_u32, le_u64}, IResult, Parser};
+use nom::{
+    bytes::complete::tag,
+    combinator::value,
+    number::complete::{le_u32, le_u64, le_u8},
+    IResult, Parser,
+};
 
 // num length bytes parser
 fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
