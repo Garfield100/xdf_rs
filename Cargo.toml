@@ -13,12 +13,15 @@ thiserror = "1.0.56"
 xmltree = "0.10.3"
 
 [dev-dependencies]
-glassbench = "0.3.5"
+criterion = "0.5.1"
 
 [profile.profiler]
 inherits = "release"
 debug = true
 strip = "none"
+
+[lib]
+bench = false
 
 [[bench]]
 name = "parse_files"
