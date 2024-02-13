@@ -1,7 +1,4 @@
-
 use std::rc::Rc;
-
-
 
 use crate::{Format, Sample};
 
@@ -24,7 +21,7 @@ pub struct Stream {
 
     // optional fields:
     pub name: Option<Rc<str>>,
-    pub r#type: Option<Rc<str>>,
+    pub stream_type: Option<Rc<str>>,
 
     pub stream_header: xmltree::Element, //contains desc
     pub stream_footer: Option<xmltree::Element>,

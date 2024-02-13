@@ -1,25 +1,27 @@
 use xmltree::Element;
 
-use crate::errors::XdfError;
+use crate::errors::XDFError;
 
-pub(crate) fn parse_version(root: &Element) -> Result<f32, XdfError> {
-    let version_element: &Element = root.get_child("version")
-        .ok_or(XdfError::BadXMLElementError("version".to_string()))?;
+pub(crate) fn parse_version(root: &Element) -> Result<f32, XDFError> {
+    let version_element: &Element = root
+        .get_child("version")
+        .ok_or(XDFError::BadXMLElementError("version".to_string()))?;
 
-    let version_str = version_element.get_text()
-        .ok_or(XdfError::BadXMLElementError("version".to_string()))?;
+    let version_str = version_element
+        .get_text()
+        .ok_or(XDFError::BadXMLElementError("version".to_string()))?;
 
     let version = version_str.parse::<f32>()?;
 
     Ok(version)
 }
 
-pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, XdfError> {
+pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, XDFError> {
     Ok(root
         .get_child(child_name)
-        .ok_or(XdfError::BadXMLElementError(child_name.to_string()))?
+        .ok_or(XDFError::BadXMLElementError(child_name.to_string()))?
         .get_text()
-        .ok_or(XdfError::BadXMLElementError(child_name.to_string()))?
+        .ok_or(XDFError::BadXMLElementError(child_name.to_string()))?
         .to_string())
 }
 

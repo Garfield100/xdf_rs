@@ -1,5 +1,5 @@
 //! Errors that can occur when parsing a chunk
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
 
 // #[derive(Debug, Error)]
@@ -19,7 +19,7 @@ use thiserror::Error;
 // }
 
 #[derive(Debug, Error)]
-pub enum XdfError {
+pub enum XDFError {
     #[error("The XML element either does not exist or contains invalid or no data: {0}")]
     BadXMLElementError(String),
 

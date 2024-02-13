@@ -39,7 +39,7 @@ pub(crate) struct StreamHeaderChunkInfo {
     pub channel_format: Format,
 
     pub name: Option<String>,
-    pub r#type: Option<String>, // "type" is obviously a reserved keyword but can be escaped using r#
+    pub stream_type: Option<String>,
 }
 
 #[derive(Debug)]
