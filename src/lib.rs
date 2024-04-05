@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 #![deny(nonstandard_style)]
 #![warn(array_into_iter)]
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
+#![warn(rustdoc::all)]
 #![crate_type = "lib"]
+#![crate_name = "xdf"]
 
 //! [![github]](https://github.com/Garfield100/xdf_rs)
 //!
@@ -10,14 +12,15 @@
 //!
 
 //! Read XDF files
+//! Currently the only supported XDF version is 1.0. (at the time of writing, this the only version that exists)
 //!
-//! [`XDF format`]: https://github.com/sccn/xdf/wiki/Specifications
+//! [`XDF format specification`]: https://github.com/sccn/xdf/wiki/Specifications
 //!
 //! This library provides a way to read files in the [`XDF format`] as specified by SCCN.
 //!
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::{collections::HashMap, rc::Rc};
 
 mod chunk_structs;
 mod errors;
@@ -38,26 +41,41 @@ use crate::parsers::xdf_file::xdf_file_parser;
 type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
-// xdf file struct
+/// XDF file struct  
+/// This struct contains information about the XDF file, including its version, header, and streams.
 #[derive(Debug)]
 pub struct XDFFile {
+    /// XDF version. Currently only 1.0 exists according to the specification.
     pub version: f32,
+    /// The XML header of the XDF file as an [`xmltree::Element`](xmltree::Element).
     pub header: xmltree::Element,
+
+    /// A vector of streams contained in the XDF file.
     pub streams: Vec<Stream>,
 }
 
+/// Possible formats for the data in a stream as given in the specification.
 #[derive(Debug, Clone, Copy)]
 pub enum Format {
+    /// signed 8-bit integer
     Int8,
+    /// signed 16-bit integer
     Int16,
+    /// signed 32-bit integer
     Int32,
+    /// signed 64-bit integer
     Int64,
+    /// 32-bit floating point number
     Float32,
+    /// 64-bit floating point number
     Float64,
+    /// UTF-8 encoded string, for example for event markers.
     String,
 }
 
 // TODO use Arc<slice> instead of Vec?
+/// The values of a sample in a stream. The values are stored as a vector of the corresponding type (or a string).
+#[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Values {
     Int8(Vec<i8>),
@@ -69,9 +87,21 @@ pub enum Values {
     String(String),
 }
 
+/// A single sample in a stream. Samples may have a timestamp and one or more values.
 #[derive(Debug, PartialEq)]
 pub struct Sample {
+    /**
+    The timestamp of the sample.
+    This is optional and may be None if the stream has an irregular sampling rate, as is often the case for marker streams.
+
+    It is worth mentioning that
+    * clock offsets are already applied to the timestamps, should they exist
+    * most of the timestamps are not actually in the recording but rather calulated using the provided nominal sampling rate.
+        Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
+    */
     pub timestamp: Option<f64>,
+
+    /// The values of the sample.
     pub values: Values,
 }
 
@@ -83,7 +113,22 @@ struct GroupedChunks {
 }
 
 impl XDFFile {
+    /**
+    Parse an XDF file from a byte slice.
+    # Arguments
+    * `bytes` - A byte slice of the whole XDF file as read from disk.
+    # Returns
+    * A Result containing the parsed [`XDFFile`](XDFFile) or an [`XDFError`](errors::XDFError).
+    # Example
+    ```rust
+    use std::fs;
+    use xdf::XDFFile;
+    let bytes = fs::read("tests/minimal.xdf").unwrap();
+    let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
+    ```
+    */
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
+        // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes).map_err(|e| match e {
             // we have to map the error to use Arc instead of slice because we would otherwise need a static lifetime.
             nom::Err::Incomplete(n) => nom::Err::Incomplete(n),
@@ -97,6 +142,7 @@ impl XDFFile {
             }),
         })?;
 
+        // we don't error here to be more error tolerant and allow for partial parsing
         if !input.is_empty() {
             warn!("There are {} bytes left in the input after parsing.", input.len());
         }
@@ -113,6 +159,7 @@ impl XDFFile {
     }
 }
 
+// takes a vector of chunks and sorts them into a GroupedChunks struct based on their type
 fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), XDFError> {
     let mut file_header_chunk: Option<FileHeaderChunk> = None;
     let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
@@ -167,6 +214,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
     Ok((file_header_chunk, info))
 }
 
+// takes grouped chunks and combines them into finished streams.
 fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
@@ -180,7 +228,8 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
         .map(|s| (s.stream_id, s))
         .collect();
 
-    // this can happen if the recording stops unexpectedly. We allow this to be more error tolerant and not lose all experimental data.
+    // this can happen if the recording stops unexpectedly.
+    // We allow this to be more error tolerant and not lose all experimental data.
     for &stream_id in stream_header_map.keys() {
         if let None = stream_footer_map.get(&stream_id) {
             warn!(
@@ -268,6 +317,8 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     Ok(streams_vec)
 }
 
+// takes a bunch of iterators over a stream's samples and some offsets and
+// combines them into a vector of samples.
 fn process_samples(
     sample_iterators: Vec<SampleIter>,
     stream_offsets: Vec<ClockOffsetChunk>,
@@ -311,10 +362,10 @@ fn process_samples(
         .collect()
 }
 
+// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
+// the offset_index is used to keep track where to start looking for the right clock offsets.
 fn interpolate_and_add_offsets(ts: f64, stream_offsets: &Vec<ClockOffsetChunk>, offset_index: &mut usize) -> f64 {
     if !stream_offsets.is_empty() {
-        // TODO add clock offset to timestamp
-
         let time_or_nan = |i: usize| {
             stream_offsets
                 .get(i + 1)
@@ -374,32 +425,67 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &Vec<ClockOffsetChunk>, 
 // TESTS
 
 #[cfg(test)]
-const EPSILON: f64 = 1E-15;
+mod tests {
+    use super::*;
 
-// test the interpolation function for timestamps *inside* the range of offsets
-#[test]
-fn test_interpolation_inside() {
-    let offsets = vec![
-        ClockOffsetChunk {
-            collection_time: 0.0,
-            offset_value: -1.0,
-            stream_id: 0,
-        },
-        ClockOffsetChunk {
-            collection_time: 1.0,
-            offset_value: 1.0,
-            stream_id: 0,
-        },
-    ];
+    const EPSILON: f64 = 1E-15;
 
-    // test at multiple steps
-    for i in 0..=10 {
-        let timestamp = i as f64 / 10.0;
+    // test the interpolation function for timestamps *inside* the range of offsets
+    #[test]
+    fn test_interpolation_inside() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
 
+        // test at multiple steps
+        for i in 0..=10 {
+            let timestamp = i as f64 / 10.0;
+
+            let mut offset_index = 0;
+            let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+
+            let expected = timestamp + (timestamp * 2.0 - 1.0); // original timestamp + interpolated offset
+
+            assert!(
+                (interpolated - expected).abs() < EPSILON,
+                "expected {} to be within {} of {}",
+                interpolated,
+                EPSILON,
+                expected
+            );
+        }
+    }
+
+    // test the interpolation function for timestamps after the last offset
+    #[test]
+    fn test_interpolation_after() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
+        // after the range we expect for the last offset to be used
+        let last_offset = offsets.last().unwrap();
+        let timestamp = last_offset.collection_time + 1.0;
         let mut offset_index = 0;
         let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
-
-        let expected = timestamp + (timestamp * 2.0 - 1.0); // original timestamp + interpolated offset
+        let expected = timestamp + last_offset.offset_value;
 
         assert!(
             (interpolated - expected).abs() < EPSILON,
@@ -409,91 +495,72 @@ fn test_interpolation_inside() {
             expected
         );
     }
-}
 
-// test the interpolation function for timestamps after the last offset
-#[test]
-fn test_interpolation_after() {
-    let offsets = vec![
-        ClockOffsetChunk {
-            collection_time: 0.0,
-            offset_value: -1.0,
-            stream_id: 0,
-        },
-        ClockOffsetChunk {
-            collection_time: 1.0,
-            offset_value: 1.0,
-            stream_id: 0,
-        },
-    ];
-    // after the range we expect for the last offset to be used
-    let last_offset = offsets.last().unwrap();
-    let timestamp = last_offset.collection_time + 1.0;
-    let mut offset_index = 0;
-    let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
-    let expected = timestamp + last_offset.offset_value;
+    // test the interpolation function for timestamps before the first offset
+    #[test]
+    fn test_interpolation_before() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
+        // after the range we expect for the last offset to be used
+        let first_offset = offsets.first().unwrap();
+        let timestamp = first_offset.collection_time - 1.0;
+        let mut offset_index = 0;
+        let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+        let expected = timestamp + first_offset.offset_value;
 
-    assert!(
-        (interpolated - expected).abs() < EPSILON,
-        "expected {} to be within {} of {}",
-        interpolated,
-        EPSILON,
-        expected
-    );
-}
+        assert!(
+            (interpolated - expected).abs() < EPSILON,
+            "expected {} to be within {} of {}",
+            interpolated,
+            EPSILON,
+            expected
+        );
+    }
 
-// test the interpolation function for timestamps before the first offset
-#[test]
-fn test_interpolation_before() {
-    let offsets = vec![
-        ClockOffsetChunk {
-            collection_time: 0.0,
-            offset_value: -1.0,
-            stream_id: 0,
-        },
-        ClockOffsetChunk {
-            collection_time: 1.0,
-            offset_value: 1.0,
-            stream_id: 0,
-        },
-    ];
-    // after the range we expect for the last offset to be used
-    let first_offset = offsets.first().unwrap();
-    let timestamp = first_offset.collection_time - 1.0;
-    let mut offset_index = 0;
-    let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
-    let expected = timestamp + first_offset.offset_value;
+    // Make sure a bad offset fails the assetion in the function. More details within the tested function.
+    #[test]
+    #[should_panic]
+    fn test_interpolation_bad_offset() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
+        // after the range we expect for the last offset to be used
+        let first_offset = offsets.first().unwrap();
+        let timestamp = first_offset.collection_time - 1.0;
+        let mut offset_index = 1;
 
-    assert!(
-        (interpolated - expected).abs() < EPSILON,
-        "expected {} to be within {} of {}",
-        interpolated,
-        EPSILON,
-        expected
-    );
-}
+        // should panic
+        interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+    }
 
-// Make sure a bad offset fails the assetion in the function. More details within the tested function.
-#[test]
-#[should_panic]
-fn test_interpolation_bad_offset() {
-    let offsets = vec![
-        ClockOffsetChunk {
-            collection_time: 0.0,
-            offset_value: -1.0,
-            stream_id: 0,
-        },
-        ClockOffsetChunk {
-            collection_time: 1.0,
-            offset_value: 1.0,
-            stream_id: 0,
-        },
-    ];
-    // after the range we expect for the last offset to be used
-    let first_offset = offsets.first().unwrap();
-    let timestamp = first_offset.collection_time - 1.0;
-    let mut offset_index = 1;
+    #[test]
+    const fn test_is_sync() {
+        const fn is_sync<T: Sync>() {}
+        is_sync::<XDFFile>();
+    }
 
-    // should panic
-    interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+    #[test]
+    const fn test_is_send() {
+        const fn is_send<T: Send>() {}
+        is_send::<XDFFile>();
+    }
 }
