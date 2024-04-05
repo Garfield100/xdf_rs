@@ -7,17 +7,26 @@
 #![crate_name = "xdf"]
 
 //! [![github]](https://github.com/Garfield100/xdf_rs)
+//! [![crates]](https://crates.io/crates/xdf)
 //!
-//! [github]: https://img.shields.io/badge/github-9090ff?style=for-the-badge&logo=github&labelColor=505050
+//! [github]: https://img.shields.io/badge/github-9090ff?style=for-the-badge&logo=github&labelColor=555555
+//! [crates]: https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust
 //!
 
-//! Read XDF files
+//! Read (and maybe one day write) XDF files
 //! Currently the only supported XDF version is 1.0. (at the time of writing, this the only version that exists)
 //!
 //! [`XDF format specification`]: https://github.com/sccn/xdf/wiki/Specifications
 //!
 //! This library provides a way to read files in the [`XDF format`] as specified by SCCN.
-//!
+//! 
+//! # Example
+//! ```rust
+//! use std::fs;
+//! use xdf::XDFFile;
+//! let bytes = fs::read("tests/minimal.xdf").unwrap();
+//! let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
+//! ```
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -42,7 +51,7 @@ type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
 /// XDF file struct  
-/// This struct contains information about the XDF file, including its version, header, and streams.
+/// The main struct representing an XDF file. 
 #[derive(Debug)]
 pub struct XDFFile {
     /// XDF version. Currently only 1.0 exists according to the specification.
