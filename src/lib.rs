@@ -205,13 +205,13 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     for (stream_id, stream_header) in stream_header_map {
         let stream_footer = stream_footer_map.remove(&stream_id);
 
-        let name = stream_header.info.name.as_ref().map(|name| Rc::from(name.as_str()));
+        let name = stream_header.info.name.as_ref().map(|name| Arc::from(name.as_str()));
 
         let stream_type = stream_header
             .info
             .stream_type
             .as_ref()
-            .map(|stream_type| Rc::from(stream_type.as_str()));
+            .map(|stream_type| Arc::from(stream_type.as_str()));
 
         let stream_offsets = grouped_chunks
             .clock_offsets
