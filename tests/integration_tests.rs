@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use xdf::{Format, Values, XDFFile};
 
@@ -6,8 +6,7 @@ const EPSILON: f64 = 1E-15;
 
 #[test]
 fn read_minimal_xdf() {
-    let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    file_path.push("tests/minimal.xdf");
+    let file_path = "tests/minimal.xdf";
     let bytes = fs::read(file_path).unwrap();
     let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
