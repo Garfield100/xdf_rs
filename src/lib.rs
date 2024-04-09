@@ -12,7 +12,6 @@
 //! [github]: https://img.shields.io/badge/github-9090ff?style=for-the-badge&logo=github&labelColor=555555
 //! [crates]: https://img.shields.io/badge/crates.io-fc8d62?style=for-the-badge&labelColor=555555&logo=rust
 //!
-
 //! Read (and maybe one day write) XDF files
 //! Currently the only supported XDF version is 1.0. (at the time of writing, this the only version that exists)
 //!
@@ -82,7 +81,6 @@ pub enum Format {
     String,
 }
 
-// TODO use Arc<slice> instead of Vec?
 /// The values of a sample in a stream. The values are stored as a vector of the corresponding type (or a string).
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
@@ -401,7 +399,7 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &Vec<ClockOffsetChunk>, 
             *offset_index += 1;
         }
 
-        // TODO verify this somehow
+        // TODO write tests for this
         // get the most recent offset before the current timestamp
         let prev_offset = stream_offsets.get(*offset_index).or_else(|| stream_offsets.last());
 
