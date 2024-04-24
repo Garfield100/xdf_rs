@@ -195,3 +195,12 @@ fn read_minimal_xdf() {
         ),
     };
 }
+
+
+#[test]
+fn fail_on_invalid_xdf() {
+    let invalid_bytes = "This is not a valid XDF file!".as_bytes();
+    let xdf_file = XDFFile::from_bytes(invalid_bytes);
+    assert!(xdf_file.is_err());
+
+}

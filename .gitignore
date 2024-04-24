@@ -7,3 +7,4 @@ glassbench_v1.db
 dhat.out.*
 Justfile
 /mutants.out*
+/lcov.info

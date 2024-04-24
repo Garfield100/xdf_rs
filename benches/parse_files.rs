@@ -41,7 +41,7 @@ fn bench_parse_files(c: &mut Criterion) {
     // });
 }
 
-criterion_group!{
+criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
     config = Criterion::default().significance_level(0.1).sample_size(500);

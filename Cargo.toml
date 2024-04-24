@@ -2,9 +2,13 @@
 name = "xdf"
 version = "0.1.0"
 edition = "2021"
-exclude = ["example-files", "!example-files/minimal.xdf", ".*"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/Garfield100/xdf_rs"
+exclude = ["example-files", ".*"]
+description = "Read XDF Files"
+keywords = ["XDF", "EEG"] # this file format is commonly output by electroencephalogram recorders
+categories = ["parser-implementations", "science::neuroscience"]
 
 [dependencies]
 log = "0.4.20"
@@ -20,6 +24,7 @@ inherits = "release"
 debug = true
 strip = "none"
 
+# criterion wants the following:
 [lib]
 bench = false
 

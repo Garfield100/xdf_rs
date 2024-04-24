@@ -60,14 +60,34 @@ fn test_num_length_bytes() {
 
 #[test]
 fn test_length() {
-    let beef: u32 = 0xBEEF;
-    let beef_bytes = beef.to_le_bytes();
-    let mut input = vec![4_u8];
-    input.extend_from_slice(&beef_bytes);
-    let result = length(&input);
+    let test_sets: [(u8, u64); 3] = [(1, 0xCA), (4, 0xCAFE_CACE), (8, 0xCAFE_CACE_600D_F00D)];
 
-    assert!(result.is_ok());
-    let (remainder, len) = result.unwrap();
-    assert!(remainder.is_empty());
-    assert_eq!(len, beef as usize);
+    for (num_bytes, value) in test_sets {
+        let mut input = vec![num_bytes];
+        match num_bytes {
+            n @ (1 | 4 | 8) => input.extend_from_slice(&value.to_le_bytes()[..n as usize]),
+            _ => panic!("unexpected num_bytes"),
+        }
+
+        let result = length(&input);
+        assert!(result.is_ok());
+        let (remainder, len) = result.unwrap();
+        assert!(remainder.is_empty());
+        assert_eq!(
+            value as usize, len,
+            "num_bytes: {}\nExpected: \t0x{:X}\nGot:\t\t0x{:X}",
+            num_bytes, value, len
+        );
+    }
+}
+
+#[test]
+fn invalid_length() {
+    let invalid_inputs = [0, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
+    for invalid_input in invalid_inputs {
+        let mut input = vec![invalid_input];
+        input.extend_from_slice(&0xCAFE_CACE_600D_F00D_u64.to_le_bytes());
+        let result = length(&input);
+        assert!(result.is_err());
+    }
 }

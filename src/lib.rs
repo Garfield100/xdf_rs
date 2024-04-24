@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![forbid(clippy::unwrap_used)]
 #![deny(nonstandard_style)]
 #![warn(array_into_iter)]
 #![warn(missing_docs)]
@@ -18,16 +19,20 @@
 //! [`XDF format specification`]: https://github.com/sccn/xdf/wiki/Specifications
 //!
 //! This library provides a way to read files in the [`XDF format`] as specified by SCCN.
-//! 
+//!
 //! # Example
 //! ```rust
-//! use std::fs;
-//! use xdf::XDFFile;
-//! let bytes = fs::read("tests/minimal.xdf").unwrap();
-//! let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
-//! ```
+//!# use std::fs;
+//!# use xdf::XDFFile;
+//!# fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!let bytes = fs::read("tests/minimal.xdf")?;
+//!let xdf_file = XDFFile::from_bytes(&bytes)?;
+//!# Ok(())
+//!# }
+//!```
 
 use std::collections::HashMap;
+
 use std::sync::Arc;
 
 mod chunk_structs;
@@ -50,12 +55,12 @@ type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
 /// XDF file struct  
-/// The main struct representing an XDF file. 
-#[derive(Debug)]
+/// The main struct representing an XDF file.
+#[derive(Debug, Clone, PartialEq)]
 pub struct XDFFile {
     /// XDF version. Currently only 1.0 exists according to the specification.
     pub version: f32,
-    /// The XML header of the XDF file as an [`xmltree::Element`](xmltree::Element).
+    /// The XML header of the XDF file as an [`xmltree::Element`].
     pub header: xmltree::Element,
 
     /// A vector of streams contained in the XDF file.
@@ -63,7 +68,7 @@ pub struct XDFFile {
 }
 
 /// Possible formats for the data in a stream as given in the specification.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Format {
     /// signed 8-bit integer
     Int8,
@@ -95,7 +100,7 @@ pub enum Values {
 }
 
 /// A single sample in a stream. Samples may have a timestamp and one or more values.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Sample {
     /**
     The timestamp of the sample.
@@ -112,6 +117,12 @@ pub struct Sample {
     pub values: Values,
 }
 
+impl PartialOrd for Sample {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.timestamp.partial_cmp(&other.timestamp)
+    }
+}
+
 struct GroupedChunks {
     stream_header_chunks: Vec<StreamHeaderChunk>,
     stream_footer_chunks: Vec<StreamFooterChunk>,
@@ -125,13 +136,16 @@ impl XDFFile {
     # Arguments
     * `bytes` - A byte slice of the whole XDF file as read from disk.
     # Returns
-    * A Result containing the parsed [`XDFFile`](XDFFile) or an [`XDFError`](errors::XDFError).
+    * A Result containing the parsed [`XDFFile`] or an [`XDFError`]
     # Example
     ```rust
-    use std::fs;
-    use xdf::XDFFile;
-    let bytes = fs::read("tests/minimal.xdf").unwrap();
-    let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
+    # use std::fs;
+    # use xdf::XDFFile;
+    # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = fs::read("tests/minimal.xdf")?;
+    let xdf_file = XDFFile::from_bytes(&bytes)?;
+    # Ok(())
+    # }
     ```
     */
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
@@ -238,7 +252,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     // this can happen if the recording stops unexpectedly.
     // We allow this to be more error tolerant and not lose all experimental data.
     for &stream_id in stream_header_map.keys() {
-        if let None = stream_footer_map.get(&stream_id) {
+        if stream_footer_map.get(&stream_id).is_none() {
             warn!(
                 "Stream header without corresponding stream footer for id: {}",
                 stream_id
@@ -248,7 +262,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
 
     // this on the other hand is a bit weirder but again, we allow it to be more error tolerant
     for &stream_id in stream_footer_map.keys() {
-        if let None = stream_header_map.get(&stream_id) {
+        if stream_header_map.get(&stream_id).is_none() {
             warn!(
                 "Stream footer without corresponding stream header for id: {}",
                 stream_id
@@ -344,16 +358,14 @@ fn process_samples(
                 let timestamp = if let Some(timestamp) = s.timestamp {
                     most_recent_timestamp = Some((i, timestamp));
                     s.timestamp
+                } else if let Some((old_i, old_timestamp)) = most_recent_timestamp {
+                    Some(old_timestamp + ((i - old_i) as f64 / srate))
                 } else {
-                    if let Some((old_i, old_timestamp)) = most_recent_timestamp {
-                        Some(old_timestamp + ((i - old_i) as f64 / srate))
-                    } else {
-                        // first sample had no timestamp despite a nominal srate being specified
-                        // so we just don´t assign any timestamp at all. In unusual cases this
-                        // could result in a stream where the first few samples have no timestamp
-                        // while the rest do. Short of looking ahead there isn't anything we can do.
-                        None
-                    }
+                    // first sample had no timestamp despite a nominal srate being specified
+                    // so we just don´t assign any timestamp at all. In unusual cases this
+                    // could result in a stream where the first few samples have no timestamp
+                    // while the rest do. Short of looking ahead there isn't anything we can do.
+                    None
                 };
 
                 let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, &stream_offsets, &mut offset_index));
@@ -371,7 +383,7 @@ fn process_samples(
 
 // takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
 // the offset_index is used to keep track where to start looking for the right clock offsets.
-fn interpolate_and_add_offsets(ts: f64, stream_offsets: &Vec<ClockOffsetChunk>, offset_index: &mut usize) -> f64 {
+fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], offset_index: &mut usize) -> f64 {
     if !stream_offsets.is_empty() {
         let time_or_nan = |i: usize| {
             stream_offsets

@@ -30,7 +30,7 @@ pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
         get_text_from_child(&xml, "channel_format"),
     );
 
-    let (channel_count_string, nominal_srate_strin, format_string) =
+    let (channel_count_string, nominal_srate_string, format_string) =
         if let (Ok(channel_count), Ok(nominal_srate), Ok(format)) = text_results {
             (channel_count, nominal_srate, format)
         } else {
@@ -51,7 +51,7 @@ pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
         )));
     };
 
-    let nominal_srate = nominal_srate_strin.parse::<f64>().ok();
+    let nominal_srate = nominal_srate_string.parse::<f64>().ok();
 
     let name = get_text_from_child(&xml, "name").ok();
     let stream_type = get_text_from_child(&xml, "type").ok();

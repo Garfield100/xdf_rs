@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 
 use nom::{
+    combinator,
     error::context,
     multi,
     number::complete::{le_f64, u8},
@@ -38,11 +39,11 @@ fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], S
     Ok((input, Sample { timestamp, values }))
 }
 
-pub(super) fn samples<'a>(
-    input: &'a [u8],
+pub(super) fn samples(
+    input: &[u8],
     // stream_info: &HashMap<u32, StreamHeaderChunkInfo>,
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
-) -> IResult<&'a [u8], SamplesChunk> {
+) -> IResult<&[u8], SamplesChunk> {
     let stream_info = stream_info.deref().borrow();
 
     let (input, _chunk_size) = context("samples chunk_size", length)(input)?;
@@ -50,7 +51,11 @@ pub(super) fn samples<'a>(
     let (input, stream_id) = context("samples stream_id", stream_id)(input)?; // 4 bytes
     let (input, num_samples) = context("samples num_samples", length)(input)?;
 
-    let stream_info = stream_info.get(&stream_id).unwrap();
+    let stream_info = match stream_info.get(&stream_id) {
+        Some(stream_info) => stream_info,
+        // nom errors are a bit painful
+        None => return context("samples get(&stream_id), missing a stream header", combinator::fail)(&[0]),
+    };
     let num_channels = stream_info.channel_count as usize;
     let format = stream_info.channel_format;
 

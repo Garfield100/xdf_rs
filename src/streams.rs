@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{Format, Sample};
 
-// minimal tags in version 1.x:
+// minimal tags in version 1.0:
 // channel count
 // nominal srate
 // channel format
@@ -12,7 +12,7 @@ use crate::{Format, Sample};
 // type
 // desc
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Stream {
     pub id: u32, // not really necessary but nie for debugging and testing
     pub channel_count: u32,

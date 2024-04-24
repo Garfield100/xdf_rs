@@ -79,10 +79,6 @@ mod tests {
         assert_eq!(rest, &[] as &[u8]);
         assert_eq!(chunks.len(), 15);
 
-        for chunk in chunks.iter() {
-            println!("{:?}\n\n", chunk);
-        }
-
         assert!(matches!(chunks[0], Chunk::FileHeader(_)));
         assert!(matches!(chunks[1], Chunk::StreamHeader(_)));
         assert!(matches!(chunks[2], Chunk::StreamHeader(_)));
