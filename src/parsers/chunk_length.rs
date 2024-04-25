@@ -29,11 +29,17 @@ pub(crate) fn length(input: &[u8]) -> IResult<&[u8], usize> {
         }
         8 => {
             let (input, length) = le_u64(input)?;
-            Ok((input, length as usize))
+            let length = usize::try_from(length).map_err(|_| {
+                nom::Err::Failure(nom::error::Error::new(
+                    input,
+                    nom::error::ErrorKind::LengthValue, // not how these errors should be used but nom is a bit of a pain here
+                ))
+            })?;
+            Ok((input, length))
         }
         _ => Err(nom::Err::Failure(nom::error::Error::new(
             input,
-            nom::error::ErrorKind::LengthValue,
+            nom::error::ErrorKind::LengthValue, // not how these errors should be used but nom is a bit of a pain here
         ))),
     }
 }
@@ -41,18 +47,18 @@ pub(crate) fn length(input: &[u8]) -> IResult<&[u8], usize> {
 #[test]
 fn test_num_length_bytes() {
     let valid_inputs = [1, 4, 8];
-    for input in valid_inputs.iter() {
-        let input_slice = [*input];
+    for input in valid_inputs {
+        let input_slice = [input];
         let result = num_length_bytes(&input_slice);
         assert!(result.is_ok());
         let (remainder, len_bytes) = result.unwrap();
         assert!(remainder.is_empty()); // no remaining bytes
-        assert_eq!(len_bytes, *input);
+        assert_eq!(len_bytes, input);
     }
 
     let invalid_inputs = [0, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
-    for invalid_input in invalid_inputs.iter() {
-        let input = [*invalid_input];
+    for invalid_input in invalid_inputs {
+        let input = [invalid_input];
         let result = num_length_bytes(&input);
         assert!(result.is_err());
     }
@@ -74,9 +80,8 @@ fn test_length() {
         let (remainder, len) = result.unwrap();
         assert!(remainder.is_empty());
         assert_eq!(
-            value as usize, len,
-            "num_bytes: {}\nExpected: \t0x{:X}\nGot:\t\t0x{:X}",
-            num_bytes, value, len
+            value, len as u64,
+            "num_bytes: {num_bytes}\nExpected: \t0x{value:X}\nGot:\t\t0x{len:X}"
         );
     }
 }

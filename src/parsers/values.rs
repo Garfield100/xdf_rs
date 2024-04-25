@@ -12,9 +12,8 @@ use super::chunk_length::length;
 fn string_value(input: &[u8]) -> IResult<&[u8], String> {
     let (input, length) = length(input)?;
     let (input, string_bytes) = nom::bytes::complete::take(length)(input)?;
-    let string = match String::from_utf8(string_bytes.to_vec()) {
-        Ok(s) => s,
-        Err(_) => return context("string_value invalid utf8", combinator::fail)(&[0]),
+    let Ok(string) = String::from_utf8(string_bytes.to_vec()) else {
+        return context("string_value invalid utf8", combinator::fail)(&[0]);
     };
 
     Ok((input, string))

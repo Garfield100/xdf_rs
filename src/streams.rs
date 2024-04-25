@@ -21,10 +21,10 @@ pub struct Stream {
 
     // optional fields:
     pub name: Option<Arc<str>>,
-    pub stream_type: Option<Arc<str>>,
+    pub r#type: Option<Arc<str>>,
 
-    pub stream_header: xmltree::Element, //contains desc
-    pub stream_footer: Option<xmltree::Element>,
+    pub header: xmltree::Element, //contains desc
+    pub footer: Option<xmltree::Element>,
 
     pub measured_srate: Option<f64>,
 

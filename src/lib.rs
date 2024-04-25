@@ -4,6 +4,8 @@
 #![warn(array_into_iter)]
 #![warn(missing_docs)]
 #![warn(rustdoc::all)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
 #![crate_type = "lib"]
 #![crate_name = "xdf"]
 
@@ -41,7 +43,7 @@ mod errors;
 mod streams;
 mod util;
 
-use chunk_structs::*;
+use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::XDFError;
 use log::warn;
 use streams::Stream;
@@ -137,6 +139,8 @@ impl XDFFile {
     * `bytes` - A byte slice of the whole XDF file as read from disk.
     # Returns
     * A Result containing the parsed [`XDFFile`] or an [`XDFError`]
+    # Errors
+    Will error if the file could not be parsed correctly for various reasons. See [`XDFError`] for more information.
     # Example
     ```rust
     # use std::fs;
@@ -170,7 +174,7 @@ impl XDFFile {
 
         let (file_header_chunk, grouped_chunks) = group_chunks(chunks)?;
 
-        let streams = process_streams(grouped_chunks)?;
+        let streams = process_streams(grouped_chunks);
 
         Ok(Self {
             version: file_header_chunk.version,
@@ -236,7 +240,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
 }
 
 // takes grouped chunks and combines them into finished streams.
-fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
+fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
         .into_iter()
@@ -290,7 +294,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
 
         let samples_vec: Vec<Sample> = process_samples(
             grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default(),
-            stream_offsets,
+            &stream_offsets,
             stream_header.info.nominal_srate,
         );
 
@@ -325,9 +329,9 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             format: stream_header.info.channel_format,
 
             name,
-            stream_type,
-            stream_header: stream_header.xml,
-            stream_footer: stream_footer.map(|s| s.xml),
+            r#type: stream_type,
+            header: stream_header.xml,
+            footer: stream_footer.map(|s| s.xml),
             measured_srate,
             samples: samples_vec,
         };
@@ -335,14 +339,14 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
         streams_vec.push(stream);
     }
 
-    Ok(streams_vec)
+    streams_vec
 }
 
 // takes a bunch of iterators over a stream's samples and some offsets and
-// combines them into a vector of samples.
+// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
 fn process_samples(
     sample_iterators: Vec<SampleIter>,
-    stream_offsets: Vec<ClockOffsetChunk>,
+    stream_offsets: &[ClockOffsetChunk],
     nominal_srate: Option<f64>,
 ) -> Vec<Sample> {
     let mut offset_index: usize = 0;
@@ -356,10 +360,13 @@ fn process_samples(
         .map(|(i, s)| -> Sample {
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
+                    // if the sample has its own timestamp, use that and update the most recent timestamp
                     most_recent_timestamp = Some((i, timestamp));
                     s.timestamp
                 } else if let Some((old_i, old_timestamp)) = most_recent_timestamp {
-                    Some(old_timestamp + ((i - old_i) as f64 / srate))
+                    // if this sample has no timestamp but a previous sample did, calculate this one's timestamp using the srate
+                    let samples_since_ts = i - old_i;
+                    Some(old_timestamp + (samples_since_ts as f64 / srate))
                 } else {
                     // first sample had no timestamp despite a nominal srate being specified
                     // so we just don´t assign any timestamp at all. In unusual cases this
@@ -368,7 +375,7 @@ fn process_samples(
                     None
                 };
 
-                let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, &stream_offsets, &mut offset_index));
+                let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, stream_offsets, &mut offset_index));
 
                 Sample {
                     timestamp,
@@ -384,7 +391,9 @@ fn process_samples(
 // takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
 // the offset_index is used to keep track where to start looking for the right clock offsets.
 fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], offset_index: &mut usize) -> f64 {
-    if !stream_offsets.is_empty() {
+    if stream_offsets.is_empty() {
+        ts //there are no offsets;
+    } else {
         let time_or_nan = |i: usize| {
             stream_offsets
                 .get(i + 1)
@@ -436,8 +445,6 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
         };
 
         ts + interpolated
-    } else {
-        ts //there are no offsets
     }
 }
 
@@ -467,7 +474,7 @@ mod tests {
 
         // test at multiple steps
         for i in 0..=10 {
-            let timestamp = i as f64 / 10.0;
+            let timestamp = f64::from(i) / 10.0;
 
             let mut offset_index = 0;
             let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
@@ -476,10 +483,7 @@ mod tests {
 
             assert!(
                 (interpolated - expected).abs() < EPSILON,
-                "expected {} to be within {} of {}",
-                interpolated,
-                EPSILON,
-                expected
+                "expected {interpolated} to be within {EPSILON} of {expected}"
             );
         }
     }
@@ -508,10 +512,7 @@ mod tests {
 
         assert!(
             (interpolated - expected).abs() < EPSILON,
-            "expected {} to be within {} of {}",
-            interpolated,
-            EPSILON,
-            expected
+            "expected {interpolated} to be within {EPSILON} of {expected}"
         );
     }
 
@@ -539,16 +540,13 @@ mod tests {
 
         assert!(
             (interpolated - expected).abs() < EPSILON,
-            "expected {} to be within {} of {}",
-            interpolated,
-            EPSILON,
-            expected
+            "expected {interpolated} to be within {EPSILON} of {expected}"
         );
     }
 
     // Make sure a bad offset fails the assetion in the function. More details within the tested function.
     #[test]
-    #[should_panic]
+    #[should_panic = "Timestamp is older than the first clock offset, but the offset index is not zero."]
     fn test_interpolation_bad_offset() {
         let offsets = vec![
             ClockOffsetChunk {

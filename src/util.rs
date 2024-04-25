@@ -26,6 +26,7 @@ pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<St
 }
 
 #[test]
+#[allow(clippy::float_cmp)] // we're testing the version parses correctly, an exact comparison is fine
 fn test_parse_version() {
     let mut root = Element::new("root");
     let mut version_element = Element::new("version");

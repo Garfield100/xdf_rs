@@ -1,6 +1,10 @@
 use nom::{error::context, IResult};
 
-use crate::{util::get_text_from_child, Format, StreamHeaderChunk, StreamHeaderChunkInfo};
+use crate::{
+    chunk_structs::{StreamHeaderChunk, StreamHeaderChunkInfo},
+    util::get_text_from_child,
+    Format,
+};
 
 use super::{chunk_length::length, chunk_tags::stream_header_tag, stream_id, xml};
 
@@ -30,24 +34,19 @@ pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
         get_text_from_child(&xml, "channel_format"),
     );
 
-    let (channel_count_string, nominal_srate_string, format_string) =
-        if let (Ok(channel_count), Ok(nominal_srate), Ok(format)) = text_results {
-            (channel_count, nominal_srate, format)
-        } else {
-            return Err(nom::Err::Failure(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::Count, //bad error kind but nom is a pain here
-            )));
-        };
-
-    let (channel_format, channel_count) = if let (Some(format), Some(channel_count)) =
-        (str_to_format(&format_string), channel_count_string.parse::<u32>().ok())
-    {
-        (format, channel_count)
-    } else {
+    let (Ok(channel_count_string), Ok(nominal_srate_string), Ok(format_string)) = text_results else {
         return Err(nom::Err::Failure(nom::error::Error::new(
             input,
-            nom::error::ErrorKind::Count, //bad error kind but nom is a pain here
+            nom::error::ErrorKind::Count, // not how these errors should be used but nom is a bit of a pain here
+        )));
+    };
+
+    let (Some(channel_format), Some(channel_count)) =
+        (str_to_format(&format_string), channel_count_string.parse::<u32>().ok())
+    else {
+        return Err(nom::Err::Failure(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Count, // not how these errors should be used but nom is a bit of a pain here
         )));
     };
 

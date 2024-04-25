@@ -1,7 +1,6 @@
 //! Errors that can occur when parsing a chunk
 use std::sync::Arc;
 
-
 use thiserror::Error;
 
 // #[derive(Debug, Error)]

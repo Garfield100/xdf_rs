@@ -17,10 +17,10 @@ fn read_minimal_xdf() {
 
     assert_eq!(xdf_file.streams.len(), stream_ids.len());
     let mut read_ids = xdf_file.streams.iter().map(|stream| stream.id).collect::<Vec<u32>>();
-    let mut expected_ids = stream_ids.clone();
+    let mut expected_ids = stream_ids;
     read_ids.sort_unstable();
     expected_ids.sort_unstable();
-    assert_eq!(read_ids.as_slice(), stream_ids);
+    assert_eq!(read_ids, expected_ids);
 
     let first_stream = xdf_file.streams.iter().find(|s| s.id == expected_ids[0]).unwrap();
     let second_stream = xdf_file.streams.iter().find(|s| s.id == expected_ids[1]).unwrap();
@@ -196,11 +196,9 @@ fn read_minimal_xdf() {
     };
 }
 
-
 #[test]
 fn fail_on_invalid_xdf() {
     let invalid_bytes = "This is not a valid XDF file!".as_bytes();
     let xdf_file = XDFFile::from_bytes(invalid_bytes);
     assert!(xdf_file.is_err());
-
 }

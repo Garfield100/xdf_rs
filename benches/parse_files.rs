@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::fs;
-use xdf;
 
 // Files used in the tmp folder here can be downloaded from https://osf.io/uc7wn/ (thank you to Clemens Brunner for the upload)
 

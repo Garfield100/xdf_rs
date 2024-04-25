@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use nom::{
     combinator,
@@ -8,7 +8,10 @@ use nom::{
     IResult,
 };
 
-use crate::{Format, Sample, SamplesChunk, StreamHeaderChunkInfo};
+use crate::{
+    chunk_structs::{SamplesChunk, StreamHeaderChunkInfo},
+    Format, Sample,
+};
 
 use super::{chunk_length::length, chunk_tags::samples_tag, stream_id, values};
 
@@ -22,7 +25,7 @@ fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
         }
         _ => Err(nom::Err::Failure(nom::error::Error::new(
             input,
-            nom::error::ErrorKind::Char,
+            nom::error::ErrorKind::Char, // not how these errors should be used but nom is a bit of a pain here
         ))),
     }
 }
@@ -39,22 +42,21 @@ fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], S
     Ok((input, Sample { timestamp, values }))
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub(super) fn samples(
     input: &[u8],
     // stream_info: &HashMap<u32, StreamHeaderChunkInfo>,
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
 ) -> IResult<&[u8], SamplesChunk> {
-    let stream_info = stream_info.deref().borrow();
+    let stream_info = stream_info.borrow();
 
     let (input, _chunk_size) = context("samples chunk_size", length)(input)?;
     let (input, _tag) = context("samples tag", samples_tag)(input)?; // 2 bytes
     let (input, stream_id) = context("samples stream_id", stream_id)(input)?; // 4 bytes
     let (input, num_samples) = context("samples num_samples", length)(input)?;
 
-    let stream_info = match stream_info.get(&stream_id) {
-        Some(stream_info) => stream_info,
-        // nom errors are a bit painful
-        None => return context("samples get(&stream_id), missing a stream header", combinator::fail)(&[0]),
+    let Some(stream_info) = stream_info.get(&stream_id) else {
+        return context("samples get(&stream_id), missing a stream header", combinator::fail)(&[0]);
     };
     let num_channels = stream_info.channel_count as usize;
     let format = stream_info.channel_format;
