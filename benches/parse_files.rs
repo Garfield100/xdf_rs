@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::fs;
+use std::{fs, time::Duration};
 
 // Files used in the tmp folder here can be downloaded from https://osf.io/uc7wn/ (thank you to Clemens Brunner for the upload)
 
@@ -43,7 +43,7 @@ fn bench_parse_files(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default().significance_level(0.1).sample_size(500);
+    config = Criterion::default().significance_level(0.1).measurement_time(Duration::from_secs(15));
     targets = bench_parse_files
 }
 criterion_main!(benches);
