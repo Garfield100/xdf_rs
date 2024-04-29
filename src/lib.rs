@@ -420,7 +420,6 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
             *offset_index += 1;
         }
 
-        // TODO write tests for this
         // get the most recent offset before the current timestamp
         let prev_offset = stream_offsets.get(*offset_index).or_else(|| stream_offsets.last());
 
