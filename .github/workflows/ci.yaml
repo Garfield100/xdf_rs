@@ -53,3 +53,6 @@ jobs:
 
       - name: Run Tests
         run: cargo test --all-targets --all-features
+
+      - name: Check SemVer compatibility
+        uses: obi1kenobi/cargo-semver-checks-action@v2
