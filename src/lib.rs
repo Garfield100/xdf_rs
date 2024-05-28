@@ -256,7 +256,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
     // this can happen if the recording stops unexpectedly.
     // We allow this to be more error tolerant and not lose all experimental data.
     for &stream_id in stream_header_map.keys() {
-        if stream_footer_map.get(&stream_id).is_none() {
+        if !stream_footer_map.contains_key(&stream_id) {
             warn!(
                 "Stream header without corresponding stream footer for id: {}",
                 stream_id
@@ -266,7 +266,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
 
     // this on the other hand is a bit weirder but again, we allow it to be more error tolerant
     for &stream_id in stream_footer_map.keys() {
-        if stream_header_map.get(&stream_id).is_none() {
+        if !stream_header_map.contains_key(&stream_id) {
             warn!(
                 "Stream footer without corresponding stream header for id: {}",
                 stream_id
