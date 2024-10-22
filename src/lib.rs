@@ -40,6 +40,10 @@ use std::sync::Arc;
 mod chunk_structs;
 mod errors;
 
+
+mod sample;
+pub use sample::Sample;
+
 mod streams;
 mod util;
 
@@ -54,7 +58,7 @@ mod parsers;
 use crate::parsers::xdf_file::xdf_file_parser;
 
 type StreamID = u32;
-type SampleIter = std::vec::IntoIter<Sample>;
+type SampleIter = std::vec::IntoIter<sample::Sample>;
 
 /// XDF file struct  
 /// The main struct representing an XDF file.
@@ -99,30 +103,6 @@ pub enum Values {
     Float32(Vec<f32>),
     Float64(Vec<f64>),
     String(String),
-}
-
-/// A single sample in a stream. Samples may have a timestamp and one or more values.
-#[derive(Debug, PartialEq, Clone)]
-pub struct Sample {
-    /**
-    The timestamp of the sample.
-    This is optional and may be None if the stream has an irregular sampling rate, as is often the case for marker streams.
-
-    It is worth mentioning that
-    * clock offsets are already applied to the timestamps, should they exist
-    * most of the timestamps are not actually in the recording but rather calulated using the provided nominal sampling rate.
-        Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
-    */
-    pub timestamp: Option<f64>,
-
-    /// The values of the sample.
-    pub values: Values,
-}
-
-impl PartialOrd for Sample {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.timestamp.partial_cmp(&other.timestamp)
-    }
 }
 
 struct GroupedChunks {
@@ -292,7 +272,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
             .remove(&stream_header.stream_id)
             .unwrap_or_default();
 
-        let samples_vec: Vec<Sample> = process_samples(
+        let samples_vec: Vec<sample::Sample> = process_samples(
             grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default(),
             &stream_offsets,
             stream_header.info.nominal_srate,
@@ -348,7 +328,7 @@ fn process_samples(
     sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],
     nominal_srate: Option<f64>,
-) -> Vec<Sample> {
+) -> Vec<sample::Sample> {
     let mut offset_index: usize = 0;
 
     let mut most_recent_timestamp = None;
@@ -357,7 +337,7 @@ fn process_samples(
         .into_iter()
         .flatten()
         .enumerate()
-        .map(|(i, s)| -> Sample {
+        .map(|(i, s)| -> sample::Sample {
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
                     // if the sample has its own timestamp, use that and update the most recent timestamp
@@ -377,7 +357,7 @@ fn process_samples(
 
                 let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, stream_offsets, &mut offset_index));
 
-                Sample {
+                sample::Sample {
                     timestamp,
                     values: s.values,
                 }
