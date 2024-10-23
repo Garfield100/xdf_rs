@@ -40,7 +40,6 @@ use std::sync::Arc;
 mod chunk_structs;
 mod errors;
 
-
 mod sample;
 pub use sample::Sample;
 
@@ -431,39 +430,62 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
 
 #[cfg(test)]
 mod tests {
+    
+
     use super::*;
 
-    const EPSILON: f64 = 1E-15;
+    const EPSILON: f64 = 1E-14;
 
     // test the interpolation function for timestamps *inside* the range of offsets
     #[test]
     fn test_interpolation_inside() {
-        let offsets = vec![
-            ClockOffsetChunk {
-                collection_time: 0.0,
-                offset_value: -1.0,
-                stream_id: 0,
-            },
-            ClockOffsetChunk {
-                collection_time: 1.0,
-                offset_value: 1.0,
-                stream_id: 0,
-            },
+        const TEST_VALUES: [((f64, f64), (f64, f64)); 4] = [
+            ((0.0, -1.0), (1.0, 1.0)),
+            ((0.0, 0.0), (1.0, 1.0)),
+            ((0.0, -1.0), (1.0, 5.0)),
+            ((4.0, -1.0), (5.0, 2.0)),
         ];
 
-        // test at multiple steps
-        for i in 0..=10 {
-            let timestamp = f64::from(i) / 10.0;
+        for ((s1_t, s1_v), (s2_t, s2_v)) in TEST_VALUES {
+            let offsets = vec![
+                ClockOffsetChunk {
+                    collection_time: s1_t,
+                    offset_value: s1_v,
+                    stream_id: 0,
+                },
+                ClockOffsetChunk {
+                    collection_time: s2_t,
+                    offset_value: s2_v,
+                    stream_id: 0,
+                },
+            ];
 
-            let mut offset_index = 0;
-            let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+            let incline = (offsets[1].offset_value - offsets[0].offset_value)
+                / (offsets[1].collection_time - offsets[0].collection_time);
 
-            let expected = timestamp + (timestamp * 2.0 - 1.0); // original timestamp + interpolated offset
-
-            assert!(
-                (interpolated - expected).abs() < EPSILON,
-                "expected {interpolated} to be within {EPSILON} of {expected}"
+            let first_pos = (
+                offsets.first().unwrap().collection_time,
+                offsets.first().unwrap().offset_value,
             );
+
+            let linspace = |start: f64, end: f64, n: usize| {
+                (0..n)
+                    .map(|i| start + (end - start) * (i as f64) / (n as f64))
+                    .collect::<Vec<f64>>()
+            };
+
+            // test at multiple steps
+            for timestamp in linspace(s1_t, s2_t, 100) {
+                let mut offset_index = 0;
+                let interpolated = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+
+                let expected: f64 = timestamp + ((timestamp - first_pos.0) * incline + first_pos.1); // original timestamp + interpolated offset
+
+                assert!(
+                    (interpolated - expected).abs() < EPSILON,
+                    "expected {interpolated} to be within {EPSILON} of {expected}"
+                );
+            }
         }
     }
 
@@ -479,6 +501,11 @@ mod tests {
             ClockOffsetChunk {
                 collection_time: 1.0,
                 offset_value: 1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 3.0,
+                offset_value: 2.0,
                 stream_id: 0,
             },
         ];
@@ -546,6 +573,20 @@ mod tests {
 
         // should panic
         interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+    }
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_no_offsets() {
+        let offsets = vec![];
+        let mut offset_index = 0;
+
+        for i in -20..=20 {
+            let timestamp = f64::from(i) / 10.0;
+            let res = interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+
+            //should be unchanged
+            assert_eq!(timestamp, res);
+        }
     }
 
     #[test]
