@@ -8,3 +8,4 @@ dhat.out.*
 Justfile
 /mutants.out*
 /lcov.info
+Cargo.lock
