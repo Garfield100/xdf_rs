@@ -1,4 +1,3 @@
-
 use super::Values;
 
 /// A single sample in a stream. Samples may have a timestamp and one or more values.
