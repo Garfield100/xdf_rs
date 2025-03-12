@@ -68,8 +68,8 @@ fn read_minimal_xdf() {
 
     // check length
     assert_eq!(
-        first_stream.samples.len(),
         expected_first_samples.len(),
+        first_stream.samples.len(),
         "unexpected number of samples in first stream. Expected {}, got {}",
         expected_first_samples.len(),
         first_stream.samples.len()
@@ -201,4 +201,32 @@ fn fail_on_invalid_xdf() {
     let invalid_bytes = "This is not a valid XDF file!".as_bytes();
     let xdf_file = XDFFile::from_bytes(invalid_bytes);
     assert!(xdf_file.is_err());
+}
+
+#[test]
+fn out_of_order_clock_offsets() {
+    // this was discovered by fuzzing
+    let file_path = "tests/out_of_order_clock_offsets.xdf";
+    let bytes = fs::read(file_path).unwrap();
+
+    let _xdf_file = XDFFile::from_bytes(&bytes);
+}
+
+#[test]
+fn chunk_length_lie() {
+    // this was discovered by fuzzing
+    let file_path = "tests/chunk_length_lie.xdf";
+    let bytes = fs::read(file_path).unwrap();
+
+    let _xdf_file = XDFFile::from_bytes(&bytes);
+}
+
+#[test]
+// If I've understood correctly this contains a chunk which is
+fn out_of_order_sample_chunk() {
+    // this was discovered by fuzzing
+    let file_path = "tests/out_of_order_sample_chunk.xdf";
+    let bytes = fs::read(file_path).unwrap();
+
+    let _xdf_file = XDFFile::from_bytes(&bytes);
 }
