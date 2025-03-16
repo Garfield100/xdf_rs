@@ -1,6 +1,7 @@
 /in/
-!/fuzz/in/minimal.xdf
+!/in/minimal.xdf
 /out/
 /target/
 /plots/*
-
+/hfuzz_target
+/hfuzz_workspace

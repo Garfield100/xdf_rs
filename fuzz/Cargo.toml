@@ -1,9 +1,8 @@
 [package]
 name = "fuzz"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-afl = "0.15.11"
-criterion = "0.5.1"
-xdf = { version = "0.1.1", path = ".." }
+honggfuzz = "0.5.56"
+xdf = { version = "*", path = ".." }
