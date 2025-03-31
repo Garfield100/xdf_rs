@@ -1,0 +1,5 @@
+fuzz_hfuzz threads='10':
+    HFUZZ_RUN_ARGS="-n {{threads}} -i ../corpus --timeout 2 --quiet --workspace ../hfuzz_workspace" cargo hfuzz run hfuzz_xdf
+    
+cmin threads='10':
+    HFUZZ_RUN_ARGS="-n {{threads}} -i ../corpus --timeout 2 --quiet --workspace ../hfuzz_workspace -M" cargo hfuzz run hfuzz_xdf

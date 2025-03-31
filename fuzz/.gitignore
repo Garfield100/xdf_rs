@@ -1,7 +1,4 @@
-/in/
-!/in/minimal.xdf
-/out/
-/target/
-/plots/*
-/hfuzz_target
-/hfuzz_workspace
+corpus
+afl_in
+afl_out
+hfuzz_workspace
