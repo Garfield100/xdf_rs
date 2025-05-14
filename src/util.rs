@@ -1,6 +1,4 @@
-use std::fmt::Display;
 
-use thiserror::Error;
 use xmltree::Element;
 
 use crate::errors::{ParseError, XDFError, XMLError};

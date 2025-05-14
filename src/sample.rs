@@ -10,7 +10,8 @@ pub struct Sample {
     It is worth mentioning that
     * clock offsets are already applied to the timestamps, should they exist
     * most of the timestamps are not actually in the recording but rather calulated using the provided nominal sampling rate.
-        Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
+    
+    Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
     */
     pub timestamp: Option<f64>,
 

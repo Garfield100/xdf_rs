@@ -60,8 +60,8 @@ pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
         channel_count,
         nominal_srate,
         channel_format,
-        name: name.map(String::from),
-        stream_type: stream_type.map(String::from),
+        name,
+        stream_type,
     };
 
     Ok((input, StreamHeaderChunk { stream_id, info, xml }))

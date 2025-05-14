@@ -402,7 +402,9 @@ fn process_samples(
     //     return Err(XDFError::InvalidSample);
     // }
 
-    let res = sample_iterators
+    
+
+    sample_iterators
         .into_iter()
         .flatten()
         .enumerate()
@@ -429,9 +431,7 @@ fn process_samples(
                 s
             }
         })
-        .collect();
-
-    res
+        .collect()
 }
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
