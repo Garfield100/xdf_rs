@@ -1,4 +1,5 @@
-corpus
+/corpus/*
+!corpus/.gitkeep
 afl_in
 afl_out
 hfuzz_workspace
