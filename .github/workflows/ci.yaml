@@ -9,7 +9,18 @@ on:
 
 jobs:
   build_lint_test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,7 +62,7 @@ jobs:
         run: cargo clippy -V && cargo clippy --all-targets --all-features -- -D warnings --no-deps
 
       - name: Run Tests
-        run: cargo test --all-targets --all-features
+        run: cargo test --all-targets --all-features --no-fail-fast
 
       - name: Run Doc Tests
         run: cargo test --doc
