@@ -6,7 +6,7 @@ use crate::{
     Format,
 };
 
-use super::{chunk_length::length, chunk_tags::stream_header_tag, stream_id, xml};
+use super::{chunk_content, chunk_tags::stream_header_tag, stream_id, xml};
 
 fn str_to_format(input: &str) -> Option<Format> {
     match input {
@@ -23,10 +23,11 @@ fn str_to_format(input: &str) -> Option<Format> {
 // StreamHeaderChunk contains streamID, info, and xml
 // the info contains channel count, nominal_srate, format, name, and type
 pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
-    let (input, chunk_length) = context("stream_header length", length)(input)?;
-    let (input, _) = context("stream_header tag", stream_header_tag)(input)?;
-    let (input, stream_id) = context("stream_header stream_id", stream_id)(input)?;
-    let (input, xml) = context("stream_header xml", |i| xml(i, chunk_length - 2 - 4))(input)?;
+    let (input, chunk_content) = context("stream_header chunk_content", chunk_content)(input)?;
+
+    let (chunk_content, _) = context("stream_header tag", stream_header_tag)(chunk_content)?;
+    let (chunk_content, stream_id) = context("stream_header stream_id", stream_id)(chunk_content)?;
+    let (_chunk_content, xml) = context("stream_header xml", |i| xml(i))(chunk_content)?; // subtract 2 for the length field and 4 for the stream_id field
 
     let text_results = (
         get_text_from_child(&xml, "channel_count"),
@@ -59,8 +60,8 @@ pub(crate) fn stream_header(input: &[u8]) -> IResult<&[u8], StreamHeaderChunk> {
         channel_count,
         nominal_srate,
         channel_format,
-        name: name.map(String::from),
-        stream_type: stream_type.map(String::from),
+        name,
+        stream_type,
     };
 
     Ok((input, StreamHeaderChunk { stream_id, info, xml }))

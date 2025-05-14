@@ -4,7 +4,7 @@
 #![warn(array_into_iter)]
 #![warn(missing_docs)]
 #![warn(rustdoc::all)]
-#![warn(clippy::pedantic)]
+#![deny(clippy::pedantic)]
 #![allow(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
 #![crate_type = "lib"]
 #![crate_name = "xdf"]
@@ -35,6 +35,7 @@
 
 use std::collections::HashMap;
 
+use std::iter::Iterator;
 use std::sync::Arc;
 
 mod chunk_structs;
@@ -47,9 +48,10 @@ mod streams;
 mod util;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
-use errors::XDFError;
+use errors::{ParseError, StreamError, XDFError};
 use log::warn;
 use streams::Stream;
+use util::FiniteF64;
 
 use crate::chunk_structs::Chunk;
 
@@ -57,7 +59,7 @@ mod parsers;
 use crate::parsers::xdf_file::xdf_file_parser;
 
 type StreamID = u32;
-type SampleIter = std::vec::IntoIter<sample::Sample>;
+type SampleIter = std::vec::IntoIter<Sample>;
 
 /// XDF file struct  
 /// The main struct representing an XDF file.
@@ -133,18 +135,20 @@ impl XDFFile {
     */
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
         // this error mapping could use some simplification
-        let (input, chunks) = xdf_file_parser(bytes).map_err(|e| match e {
-            // we have to map the error to use Arc instead of slice because we would otherwise need a static lifetime.
-            nom::Err::Incomplete(n) => nom::Err::Incomplete(n),
-            nom::Err::Error(nom::error::Error { input, code }) => nom::Err::Error(nom::error::Error {
-                input: Arc::from(input.to_owned()),
-                code,
-            }),
-            nom::Err::Failure(nom::error::Error { input, code }) => nom::Err::Failure(nom::error::Error {
-                input: Arc::from(input.to_owned()),
-                code,
-            }),
-        })?;
+        let (input, chunks) = xdf_file_parser(bytes)
+            .map_err(|e| match e {
+                // we have to map the error to use Arc instead of slice because we would otherwise need a static lifetime.
+                nom::Err::Incomplete(n) => nom::Err::Incomplete(n),
+                nom::Err::Error(nom::error::Error { input, code }) => nom::Err::Error(nom::error::Error {
+                    input: Arc::from(input.to_owned()),
+                    code,
+                }),
+                nom::Err::Failure(nom::error::Error { input, code }) => nom::Err::Failure(nom::error::Error {
+                    input: Arc::from(input.to_owned()),
+                    code,
+                }),
+            })
+            .map_err(ParseError::from)?;
 
         // we don't error here to be more error tolerant and allow for partial parsing
         if !input.is_empty() {
@@ -153,7 +157,7 @@ impl XDFFile {
 
         let (file_header_chunk, grouped_chunks) = group_chunks(chunks)?;
 
-        let streams = process_streams(grouped_chunks);
+        let streams = process_streams(grouped_chunks)?;
 
         Ok(Self {
             version: file_header_chunk.version,
@@ -205,7 +209,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
             },
         );
 
-    let file_header_chunk = file_header_chunk.ok_or(XDFError::MissingFileHeaderError)?;
+    let file_header_chunk = file_header_chunk.ok_or(StreamError::MissingFileHeader)?;
 
     let info = GroupedChunks {
         stream_header_chunks,
@@ -219,7 +223,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
 }
 
 // takes grouped chunks and combines them into finished streams.
-fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
+fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
         .into_iter()
@@ -236,20 +240,14 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
     // We allow this to be more error tolerant and not lose all experimental data.
     for &stream_id in stream_header_map.keys() {
         if !stream_footer_map.contains_key(&stream_id) {
-            warn!(
-                "Stream header without corresponding stream footer for id: {}",
-                stream_id
-            );
+            warn!("Stream header without corresponding stream footer for id: {stream_id}");
         }
     }
 
     // this on the other hand is a bit weirder but again, we allow it to be more error tolerant
     for &stream_id in stream_footer_map.keys() {
         if !stream_header_map.contains_key(&stream_id) {
-            warn!(
-                "Stream footer without corresponding stream header for id: {}",
-                stream_id
-            );
+            warn!("Stream footer without corresponding stream header for id: {stream_id}");
         }
     }
 
@@ -266,12 +264,19 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
             .as_ref()
             .map(|stream_type| Arc::from(stream_type.as_str()));
 
-        let stream_offsets = grouped_chunks
+        let mut stream_offsets = grouped_chunks
             .clock_offsets
             .remove(&stream_header.stream_id)
             .unwrap_or_default();
 
-        let samples_vec: Vec<sample::Sample> = process_samples(
+        // Since clock offsets are internal types only, I could look into usinng a FiniteF64 type.
+        stream_offsets.retain(|o| o.collection_time.is_finite() && o.offset_value.is_finite());
+
+        if !stream_offsets.is_sorted() {
+            return Err(ParseError::InvalidClockOffset.into());
+        }
+
+        let samples_vec: Vec<Sample> = process_samples(
             grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default(),
             &stream_offsets,
             stream_header.info.nominal_srate,
@@ -318,45 +323,96 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Vec<Stream> {
         streams_vec.push(stream);
     }
 
-    streams_vec
+    Ok(streams_vec)
 }
 
-// takes a bunch of iterators over a stream's samples and some offsets and
-// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
+/// takes a bunch of iterators over a stream's samples and some offsets and
+/// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
 fn process_samples(
-    sample_iterators: Vec<SampleIter>,
+    mut sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],
     nominal_srate: Option<f64>,
-) -> Vec<sample::Sample> {
+) -> Vec<Sample> {
+    debug_assert!(stream_offsets
+        .iter()
+        .all(|o| o.stream_id == stream_offsets[0].stream_id));
+
     let mut offset_index: usize = 0;
 
-    let mut most_recent_timestamp = None;
+    let mut most_recent_timestamp = (0_usize, 0_f64);
+
+    // Sort the iterators according to first timestamp.
+    // If the first sample from this iterator has no timestamp, append this iterator to the previous iterator
+    // What if the first sample from the first iterator also has no timestamp?
+    // Both the Python and the Matlab implementations use zero as a first default, so I've done the same here.
+
+    let mut sample_iterators_merged = vec![];
+    if let Some((first, rest)) = sample_iterators.split_first_mut() {
+        // We store each set of iterators with the first iter's first timestamp in a tuple
+        let mut first = first.peekable();
+        let first_ts = first
+            .peek()
+            .and_then(|s| s.timestamp)
+            .and_then(FiniteF64::new)
+            .unwrap_or(FiniteF64::zero());
+        sample_iterators_merged.push((first_ts, vec![first]));
+
+        for it in rest {
+            let mut it = it.peekable();
+            if let Some(first_sample) = it.peek() {
+                // If there is a timestamp and it is finite, create a new set of iterators
+                if let Some(ts) = first_sample.timestamp.and_then(FiniteF64::new) {
+                    sample_iterators_merged.push((ts, vec![it]));
+                } else {
+                    // Technically this need not be checked as there is always a last
+                    if let Some(v) = sample_iterators_merged.last_mut() {
+                        v.1.push(it);
+                    }
+                }
+            }
+        }
+    }
+
+    // Now we have a vec of tuples containing a finite timestamp and a vec of iterators.
+    // We need to sort the outer vec and chain the iterators in each inner vec.
+
+    sample_iterators_merged.sort_by_key(|t| t.0);
+
+    let sample_iterators = sample_iterators_merged
+        .into_iter()
+        .flat_map(|t| t.1)
+        .map(Iterator::peekable)
+        .filter_map(|mut it| if it.peek().is_none() { None } else { Some(it) });
+
+    // let samples_in_order: bool = sample_iterators
+    //     .clone()
+    //     .filter_map(|mut it| it.peek().map(|s| s.timestamp))
+    //     .is_sorted();
+
+    // if !samples_in_order {
+    //     return Err(XDFError::InvalidSample);
+    // }
 
     sample_iterators
         .into_iter()
         .flatten()
         .enumerate()
-        .map(|(i, s)| -> sample::Sample {
+        .map(|(i, s)| -> Sample {
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
                     // if the sample has its own timestamp, use that and update the most recent timestamp
-                    most_recent_timestamp = Some((i, timestamp));
+                    most_recent_timestamp = (i, timestamp);
                     s.timestamp
-                } else if let Some((old_i, old_timestamp)) = most_recent_timestamp {
+                } else {
                     // if this sample has no timestamp but a previous sample did, calculate this one's timestamp using the srate
+                    let (old_i, old_timestamp) = most_recent_timestamp;
                     let samples_since_ts = i - old_i;
                     Some(old_timestamp + (samples_since_ts as f64 / srate))
-                } else {
-                    // first sample had no timestamp despite a nominal srate being specified
-                    // so we just don´t assign any timestamp at all. In unusual cases this
-                    // could result in a stream where the first few samples have no timestamp
-                    // while the rest do. Short of looking ahead there isn't anything we can do.
-                    None
                 };
 
                 let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, stream_offsets, &mut offset_index));
 
-                sample::Sample {
+                Sample {
                     timestamp,
                     values: s.values,
                 }
@@ -367,8 +423,8 @@ fn process_samples(
         .collect()
 }
 
-// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
-// the offset_index is used to keep track where to start looking for the right clock offsets.
+/// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
+/// the `offset_index` is used to keep track where to start looking for the right clock offsets.
 fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], offset_index: &mut usize) -> f64 {
     if stream_offsets.is_empty() {
         ts //there are no offsets;
@@ -383,14 +439,17 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
 
         // if the current timestamp is older than the what the current offset would imply,
         // the offset must either be zero (and the timestamp older than *every* offset),
-        // or something has gone horribly wrong.
+        // or something has gone horribly wrong (for example the clock offsets or the chunks are not in order of collection time).
 
         // indexing to zero is safe because we know the vector is not empty
         if ts < stream_offsets[0].collection_time {
-            assert_eq!(
-                *offset_index, 0,
-                "Timestamp is older than the first clock offset, but the offset index is not zero."
-            );
+            // debug_assert_eq!(
+            //     *offset_index, 0,
+            //     "Timestamp is older than the first clock offset, but the offset index is not zero."
+            // );
+            // I initially thought this would be an invalid state, however this can happen if the chunks are not in order of collection time.
+            // This isn't great but not fatal either. We check clock offsets for being in order, so it can't be those.
+            // As a best effort we add the first stream offset, as that is the closest one.
             return ts + stream_offsets[0].offset_value;
         }
 
@@ -430,11 +489,34 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
 
     const EPSILON: f64 = 1E-14;
+
+    // now without panics!
+    #[test]
+    fn test_interpolation_bad_offset() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
+        // after the range we expect for the last offset to be used
+        let first_offset = offsets.first().unwrap();
+        let timestamp = first_offset.collection_time - 1.0;
+        let mut offset_index = 1;
+
+        // should panic
+        interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+    }
 
     // test the interpolation function for timestamps *inside* the range of offsets
     #[test]
@@ -550,30 +632,6 @@ mod tests {
         );
     }
 
-    // Make sure a bad offset fails the assetion in the function. More details within the tested function.
-    #[test]
-    #[should_panic = "Timestamp is older than the first clock offset, but the offset index is not zero."]
-    fn test_interpolation_bad_offset() {
-        let offsets = vec![
-            ClockOffsetChunk {
-                collection_time: 0.0,
-                offset_value: -1.0,
-                stream_id: 0,
-            },
-            ClockOffsetChunk {
-                collection_time: 1.0,
-                offset_value: 1.0,
-                stream_id: 0,
-            },
-        ];
-        // after the range we expect for the last offset to be used
-        let first_offset = offsets.first().unwrap();
-        let timestamp = first_offset.collection_time - 1.0;
-        let mut offset_index = 1;
-
-        // should panic
-        interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
-    }
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_no_offsets() {

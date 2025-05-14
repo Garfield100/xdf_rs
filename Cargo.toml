@@ -5,16 +5,19 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/Garfield100/xdf_rs"
-exclude = ["example-files", ".*"]
+exclude = ["example-files", ".*", "/fuzz"]
 description = "Read XDF Files"
-keywords = ["XDF", "EEG"] # this file format is commonly output by electroencephalogram recorders
+keywords = [
+    "XDF",
+    "EEG",
+] # this file format is commonly output by electroencephalogram recorders
 categories = ["parser-implementations", "science::neuroscience"]
 
 [dependencies]
 log = "0.4.20"
 nom = "7.1.3"
 thiserror = "1.0.56"
-xmltree = "0.11.0"
+xmltree = "0.10.3"
 
 [dev-dependencies]
 criterion = "0.5.1"

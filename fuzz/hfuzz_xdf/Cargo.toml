@@ -1,0 +1,8 @@
+[package]
+name = "hfuzz_xdf"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+honggfuzz = "0.5.56"
+xdf = { version = "*", path = "../.." }

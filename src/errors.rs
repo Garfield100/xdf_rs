@@ -1,74 +1,81 @@
 //! Errors that can occur when parsing a chunk
 use std::sync::Arc;
-
 use thiserror::Error;
-
-// #[derive(Debug, Error)]
-// pub enum ParseChunkError {
-//     /// another general error for when an invalid byte is encountered, such as an invalid number of length bytes being specified.
-//     #[error("Invalid chunk bytes. Reason: {msg:?}\nchunk tag: {raw_chunk_tag:?}\nchunk bytes: {raw_chunk_bytes:#?}\nat content byte offset: {offset:?}")]
-//     InvalidChunkBytesError {
-//         /// the reason for the error
-//         msg: String,
-//         /// the bytes of the raw chunk that caused the error
-//         raw_chunk_bytes: Vec<u8>,
-//         /// the tag of the raw chunk that caused the error
-//         raw_chunk_tag: u16,
-//         /// the offset in the raw chunk's content where the error occurred
-//         offset: usize,
-//     },
-// }
 
 #[derive(Debug, Error)]
 pub enum XDFError {
+    #[error(transparent)]
+    Xml(#[from] XMLError),
+
+    #[error(transparent)]
+    Stream(#[from] StreamError),
+
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum XMLError {
     #[error("The XML element either does not exist or contains invalid or no data: {0}")]
-    BadXMLElementError(String),
+    BadElement(String),
 
-    #[error("Version {0} is not supported")]
-    VersionNotSupportedError(f32),
+    #[error(transparent)]
+    ParseError(#[from] xmltree::ParseError),
+}
 
-    #[error("Error parsing chunk")]
-    ParseChunkError,
-
-    #[error("Error reading chunk")]
-    ReadChunkError,
-
-    #[error("Could not find file header chunk")]
-    MissingFileHeaderError,
-
-    #[error("Multiple file header chunks found")]
-    MultipleFileHeaderError,
-
+#[derive(Debug, Error)]
+pub enum StreamError {
     #[error("Could not find stream header chunk for stream id {0}")]
-    MissingStreamHeaderError(u32),
+    MissingHeader(u32),
 
     #[error("Could not find stream footer chunk for stream id {0}")]
-    MissingStreamFooterChunk(u32),
+    MissingFooter(u32),
+
+    #[error("Could not find file header chunk")]
+    MissingFileHeader,
+
+    #[error("Multiple file header chunks found")]
+    MultipleFileHeader,
+
+    #[error("Version {0} is not supported")]
+    UnsupportedVersion(f32),
+}
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("Error parsing chunk")]
+    ChunkParse,
+
+    #[error("Error reading chunk")]
+    ChunkRead,
 
     #[error("File does not begin with magic number")]
-    NoMagicNumberError,
+    NoMagicNumber,
 
     #[error("Invalid tag: {0}")]
-    InvalidTagError(u16),
+    InvalidTag(u16),
 
     #[error("Invalid number of count bytes. Expected 1, 4, or 8, but got {0}")]
     InvalidNumCountBytes(u8),
 
-    #[error(transparent)]
-    TryFromSliceError(#[from] std::array::TryFromSliceError),
+    #[error("There is something wrong with the samples")]
+    InvalidSample,
+
+    #[error("Encountered an invalid clock offset")]
+    InvalidClockOffset,
 
     #[error(transparent)]
-    XMLParseError(#[from] xmltree::ParseError),
+    TryFromSlice(#[from] std::array::TryFromSliceError),
 
     #[error(transparent)]
-    Utf8Error(#[from] std::str::Utf8Error),
+    Utf8(#[from] std::str::Utf8Error),
 
     #[error(transparent)]
-    IOError(#[from] std::io::Error),
+    ParseFloat(#[from] std::num::ParseFloatError),
 
     #[error(transparent)]
-    ParseFloatError(#[from] std::num::ParseFloatError),
-
-    #[error(transparent)]
-    NomErr(#[from] nom::Err<nom::error::Error<Arc<[u8]>>>),
+    Nom(#[from] nom::Err<nom::error::Error<Arc<[u8]>>>),
 }

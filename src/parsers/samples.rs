@@ -13,7 +13,7 @@ use crate::{
     Format, Sample,
 };
 
-use super::{chunk_length::length, chunk_tags::samples_tag, stream_id, values};
+use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id, values};
 
 fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
     let (input, timestamp_bytes) = u8(input)?;
@@ -49,11 +49,10 @@ pub(super) fn samples(
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
 ) -> IResult<&[u8], SamplesChunk> {
     let stream_info = stream_info.borrow();
-
-    let (input, _chunk_size) = context("samples chunk_size", length)(input)?;
-    let (input, _tag) = context("samples tag", samples_tag)(input)?; // 2 bytes
-    let (input, stream_id) = context("samples stream_id", stream_id)(input)?; // 4 bytes
-    let (input, num_samples) = context("samples num_samples", length)(input)?;
+    let (input, chunk_content) = context("samples chunk_content", chunk_content)(input)?;
+    let (chunk_content, _tag) = context("samples tag", samples_tag)(chunk_content)?; // 2 bytes
+    let (chunk_content, stream_id) = context("samples stream_id", stream_id)(chunk_content)?; // 4 bytes
+    let (chunk_content, num_samples) = context("samples num_samples", length)(chunk_content)?;
 
     let Some(stream_info) = stream_info.get(&stream_id) else {
         return context("samples get(&stream_id), missing a stream header", combinator::fail)(&[0]);
@@ -61,7 +60,7 @@ pub(super) fn samples(
     let num_channels = stream_info.channel_count as usize;
     let format = stream_info.channel_format;
 
-    let (input, samples) = multi::count(|input| sample(input, num_channels, format), num_samples)(input)?;
+    let (_chunk_content, samples) = multi::count(|i| sample(i, num_channels, format), num_samples)(chunk_content)?;
 
     Ok((input, SamplesChunk { stream_id, samples }))
 }

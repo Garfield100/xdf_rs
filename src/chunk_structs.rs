@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use xmltree::Element;
 
 use crate::{Format, Sample};
@@ -56,11 +58,19 @@ pub(crate) struct SamplesChunk {
 }
 
 //collection_time and offset_value are in seconds
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct ClockOffsetChunk {
     pub stream_id: u32,
     pub collection_time: f64,
     pub offset_value: f64,
+}
+
+impl Eq for ClockOffsetChunk {}
+
+impl PartialOrd for ClockOffsetChunk {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.collection_time.partial_cmp(&other.collection_time)
+    }
 }
 
 #[derive(Debug)]

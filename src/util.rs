@@ -1,17 +1,17 @@
 use xmltree::Element;
 
-use crate::errors::XDFError;
+use crate::errors::{ParseError, XDFError, XMLError};
 
 pub(crate) fn parse_version(root: &Element) -> Result<f32, XDFError> {
     let version_element: &Element = root
         .get_child("version")
-        .ok_or(XDFError::BadXMLElementError("version".to_string()))?;
+        .ok_or(XMLError::BadElement("version".to_string()))?;
 
     let version_str = version_element
         .get_text()
-        .ok_or(XDFError::BadXMLElementError("version".to_string()))?;
+        .ok_or(XMLError::BadElement("version".to_string()))?;
 
-    let version = version_str.parse::<f32>()?;
+    let version = version_str.parse::<f32>().map_err(ParseError::from)?;
 
     Ok(version)
 }
@@ -19,11 +19,55 @@ pub(crate) fn parse_version(root: &Element) -> Result<f32, XDFError> {
 pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<String, XDFError> {
     Ok(root
         .get_child(child_name)
-        .ok_or(XDFError::BadXMLElementError(child_name.to_string()))?
+        .ok_or(XMLError::BadElement(child_name.to_string()))?
         .get_text()
-        .ok_or(XDFError::BadXMLElementError(child_name.to_string()))?
+        .ok_or(XMLError::BadElement(child_name.to_string()))?
         .to_string())
 }
+
+// #[derive(Debug, Error)]
+// pub(crate) struct NotFiniteError();
+// impl Display for NotFiniteError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         writeln!(f, "The provided f64 is not finite.")
+//     }
+// }
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+pub(crate) struct FiniteF64(f64);
+
+impl FiniteF64 {
+    pub(crate) fn new(float: f64) -> Option<Self> {
+        if float.is_finite() {
+            Some(Self(float))
+        } else {
+            None
+        }
+    }
+
+    pub(crate) const fn zero() -> Self {
+        Self(0.0)
+    }
+}
+
+impl Eq for FiniteF64 {}
+
+#[allow(clippy::derive_ord_xor_partial_ord)]
+impl Ord for FiniteF64 {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // finite, therefore safe to unwrap
+        self.partial_cmp(other)
+            .expect("FiniteF64 comparison failed, please file an issue in xdf_rs")
+    }
+}
+
+// impl TryFrom<f64> for FiniteF64 {
+//     type Error = NotFiniteError;
+
+//     fn try_from(value: f64) -> Result<Self, Self::Error> {
+//         Self::new(value).ok_or(NotFiniteError())
+//     }
+// }
 
 #[test]
 #[allow(clippy::float_cmp)] // we're testing the version parses correctly, an exact comparison is fine

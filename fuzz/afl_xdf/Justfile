@@ -1,0 +1,5 @@
+fuzz_afl:
+    AFL_AUTORESUME=1 cargo afl fuzz -M main-afl -i ../afl_in -F ../corpus -o ../afl_out target/debug/afl_xdf
+    
+fuzz_afl_secondary id:
+    AFL_AUTORESUME=1 cargo afl fuzz -S {{id}} -i ../afl_in -o ../afl_out target/debug/afl_xdf
