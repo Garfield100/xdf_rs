@@ -349,7 +349,6 @@ fn process_samples(
     let mut sample_iterators_merged = vec![];
     if let Some((first, rest)) = sample_iterators.split_first_mut() {
         // We store each set of iterators with the first iter's first timestamp in a tuple
-        dbg!(&first);
         let mut first = first.peekable();
         let first_ts = first
             .peek()
@@ -373,8 +372,6 @@ fn process_samples(
             }
         }
     }
-
-    dbg!(&sample_iterators_merged);
 
     // Now we have a vec of tuples containing a finite timestamp and a vec of iterators.
     // We need to sort the outer vec and chain the iterators in each inner vec.
@@ -444,7 +441,6 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
         // the offset must either be zero (and the timestamp older than *every* offset),
         // or something has gone horribly wrong (for example the clock offsets or the chunks are not in order of collection time).
 
-        dbg!(ts, stream_offsets[0].collection_time, *offset_index);
         // indexing to zero is safe because we know the vector is not empty
         if ts < stream_offsets[0].collection_time {
             // debug_assert_eq!(
@@ -497,6 +493,30 @@ mod tests {
     use super::*;
 
     const EPSILON: f64 = 1E-14;
+
+    // now without panics!
+    #[test]
+    fn test_interpolation_bad_offset() {
+        let offsets = vec![
+            ClockOffsetChunk {
+                collection_time: 0.0,
+                offset_value: -1.0,
+                stream_id: 0,
+            },
+            ClockOffsetChunk {
+                collection_time: 1.0,
+                offset_value: 1.0,
+                stream_id: 0,
+            },
+        ];
+        // after the range we expect for the last offset to be used
+        let first_offset = offsets.first().unwrap();
+        let timestamp = first_offset.collection_time - 1.0;
+        let mut offset_index = 1;
+
+        // should panic
+        interpolate_and_add_offsets(timestamp, &offsets, &mut offset_index);
+    }
 
     // test the interpolation function for timestamps *inside* the range of offsets
     #[test]
