@@ -4,6 +4,7 @@ use xdf::{Format, Values, XDFFile};
 
 const EPSILON: f64 = 1E-15;
 
+#[allow(clippy::too_many_lines)]
 #[test]
 fn read_minimal_xdf() {
     let file_path = "tests/minimal.xdf";
@@ -11,7 +12,7 @@ fn read_minimal_xdf() {
     let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
     //must be sorted
-    let stream_ids: [u32; 2] = [0, 0x02C0FFEE];
+    let stream_ids: [u32; 2] = [0, 0x02C0_FFEE];
 
     assert_eq!(xdf_file.header.name, "info");
 
@@ -83,7 +84,7 @@ fn read_minimal_xdf() {
             Format::Int16,
             first_stream.format
         ),
-    };
+    }
 
     // compare only values
     assert_eq!(
@@ -174,15 +175,14 @@ fn read_minimal_xdf() {
 
                 assert_eq!(
                     actual_string, expected,
-                    "Unexpected value in second stream. Expected \n{}\n, got \n{}\n",
-                    expected, actual_string
+                    "Unexpected value in second stream. Expected \n{expected}\n, got \n{actual_string}\n"
                 );
             }
             _ => panic!(
                 "Unexpected type in second stream. Expected String, got {:?}",
                 actual_sample.values
             ),
-        };
+        }
     }
 
     // check format
@@ -193,7 +193,7 @@ fn read_minimal_xdf() {
             Format::String,
             second_stream.format
         ),
-    };
+    }
 }
 
 #[test]
