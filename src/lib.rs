@@ -47,6 +47,8 @@ pub use sample::Sample;
 mod streams;
 mod util;
 
+mod writer;
+
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
 use log::warn;
@@ -104,6 +106,20 @@ pub enum Values {
     Float32(Vec<f32>),
     Float64(Vec<f64>),
     String(String),
+}
+
+impl From<Format> for String {
+    fn from(format: Format) -> Self {
+        match format {
+            Format::Int8 => "int8".to_string(),
+            Format::Int16 => "int16".to_string(),
+            Format::Int32 => "int32".to_string(),
+            Format::Int64 => "int64".to_string(),
+            Format::Float32 => "float32".to_string(),
+            Format::Float64 => "float64".to_string(),
+            Format::String => "string".to_string(),
+        }
+    }
 }
 
 struct GroupedChunks {
