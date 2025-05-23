@@ -57,6 +57,7 @@ impl<Dest: Write> XDFWriter<Dest> {
             sample_count: 0,
         });
 
+        // Spec says to start at 1, so get the length after pushing
         let stream_id = u32::try_from(self.footer_info.len())?;
 
         let handle = StreamHandle::new(stream_id, stream_info);
@@ -65,7 +66,73 @@ impl<Dest: Write> XDFWriter<Dest> {
         Ok(handle)
     }
 
-    pub fn write_to_stream<T: StreamFormat>(&mut self, handle: &StreamHandle<T>) -> Result<(), XDFWriterError> {
-        todo!()
+    pub fn write_num_samples<T: StreamFormat>(
+        &mut self,
+        handle: &StreamHandle<T>,
+        sample: &[&[T]],
+        timestamp: Option<f64>,
+    ) -> Result<(), XDFWriterError> {
+        assert!(
+            sample.len() == handle.stream_info.channel_count,
+            "Data length ({}) does not match stream channel count ({})",
+            sample.len(),
+            handle.stream_info.channel_count
+        );
+
+        // let mut bytes = Vec::new();
+        // let samples_bytes
+
+        todo!("Implement writing number samples")
     }
+
+    pub fn write_string_sample<T: AsRef<str>>(
+        &mut self,
+        handle: &StreamHandle<&str>,
+        sample: T,
+        timestamp: Option<f64>,
+    ) -> Result<(), XDFWriterError> {
+        let len = sample.as_ref().len();
+
+        // let mut bytes = Vec::new();
+
+        todo!("implement writing string samples")
+    }
+}
+
+#[test]
+fn test_write_sample_int() {
+    let mut buffer = Vec::new();
+    let mut writer = XDFWriter::new(&mut buffer);
+
+    let stream_info = StreamInfo {
+        channel_count: 2,
+        nominal_srate: Some(100.0),
+        name: "Integer Stream".to_string(),
+        content_type: "EEG".to_string(),
+    };
+
+    let handle = writer.add_stream::<i32>(stream_info).unwrap();
+
+    let sample = [1, 2];
+    writer.write_num_samples(&handle, &[&sample], None).unwrap();
+    assert_ne!(buffer.len(), 0); // TODO write better test, this is mostly for type checking
+}
+
+#[test]
+fn test_write_sample_string() {
+    let mut buffer = Vec::new();
+    let mut writer = XDFWriter::new(&mut buffer);
+
+    let stream_info = StreamInfo {
+        channel_count: 1,
+        nominal_srate: None,
+        name: "String Stream".to_string(),
+        content_type: "Marker".to_string(),
+    };
+
+    let handle = writer.add_stream::<&str>(stream_info).unwrap();
+
+    let sample = "Hello 🦀!";
+    writer.write_string_sample(&handle, sample, None).unwrap();
+    assert_ne!(buffer.len(), 0); // TODO write better test, this is mostly for type checking
 }

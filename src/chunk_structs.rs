@@ -91,3 +91,16 @@ pub(crate) enum Tag {
     Boundary,
     StreamFooter,
 }
+
+impl From<Tag> for [u8; 2] {
+    fn from(tag: Tag) -> Self {
+        match tag {
+            Tag::FileHeader => [1, 0],
+            Tag::StreamHeader => [2, 0],
+            Tag::Samples => [3, 0],
+            Tag::ClockOffset => [4, 0],
+            Tag::Boundary => [5, 0],
+            Tag::StreamFooter => [6, 0],
+        }
+    }
+}

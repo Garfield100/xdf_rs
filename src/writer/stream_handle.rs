@@ -6,9 +6,7 @@ use crate::Format;
 
 use super::{StreamInfo, XDFWriterError};
 macro_rules! define_stream_type {
-    ($name:ident, $format:expr) => {
-        pub struct $name;
-
+    ($name:ty, $format:expr) => {
         impl StreamFormat for $name {
             fn get_format() -> Format {
                 $format
@@ -17,34 +15,42 @@ macro_rules! define_stream_type {
     };
 }
 
-pub(crate) trait StreamFormat {
+pub(crate) trait StreamFormat: Sized {
     fn get_format() -> Format;
 }
 
-define_stream_type!(Int8Stream, Format::Int8);
-define_stream_type!(Int16Stream, Format::Int16);
-define_stream_type!(Int32Stream, Format::Int32);
-define_stream_type!(Int64Stream, Format::Int64);
-define_stream_type!(Float32Stream, Format::Float32);
-define_stream_type!(Float64Stream, Format::Float64);
-define_stream_type!(StringStream, Format::String);
+define_stream_type!(i8, Format::Int8);
+define_stream_type!(i16, Format::Int16);
+define_stream_type!(i32, Format::Int32);
+define_stream_type!(i64, Format::Int64);
+define_stream_type!(f32, Format::Float32);
+define_stream_type!(f64, Format::Float64);
+define_stream_type!(&str, Format::String);
 
-#[derive(Debug)]
-pub struct StreamHandle<'writer, T: StreamFormat> {
+pub(crate) trait NumberFormat {}
+impl NumberFormat for i8 {}
+impl NumberFormat for i16 {}
+impl NumberFormat for i32 {}
+impl NumberFormat for i64 {}
+impl NumberFormat for f32 {}
+impl NumberFormat for f64 {}
+
+#[derive(Debug, Clone)]
+pub struct StreamHandle<T: StreamFormat> {
     _format_marker: PhantomData<T>,
-    _writer_lifetime_marker: PhantomData<&'writer ()>,
-    stream_info: StreamInfo,
-    stream_id: u32,
+    // _writer_lifetime_marker: PhantomData<&'writer ()>,
+    pub(crate) stream_info: StreamInfo,
+    pub(crate) stream_id: u32,
 }
 
-impl<T: StreamFormat> StreamHandle<'_, T> {
+impl<T: StreamFormat> StreamHandle<T> {
     // to be called by XDFWriter
     pub(crate) fn new(stream_id: u32, stream_info: StreamInfo) -> Self {
         Self {
             stream_id,
             stream_info,
             _format_marker: PhantomData,
-            _writer_lifetime_marker: PhantomData,
+            // _writer_lifetime_marker: PhantomData,
         }
     }
 
