@@ -1,20 +1,32 @@
 // API design and builder pattern inspired by the CSV crate
-use std::io::{self, Write};
+use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+};
 
-use stream_handle::{StreamFormat, StreamHandle};
+use stream_format::{NumberFormat, StreamFormat};
 
-mod stream_handle;
+mod error;
+mod stream_builder;
+mod stream_format;
+mod stream_writer;
+mod timestamp;
 mod xdf_builder;
 
-#[derive(thiserror::Error, Debug)]
-pub enum XDFWriterError {
-    #[error(transparent)]
-    XMLTree(#[from] xmltree::Error),
-    #[error(transparent)]
-    IO(#[from] io::Error),
-    #[error(transparent)]
-    Conversion(#[from] std::num::TryFromIntError),
-}
+use error::XDFWriterError;
+use stream_builder::StreamBuilder;
+pub use strict_num::NonZeroPositiveF64;
+use timestamp::Timestamped;
+pub use timestamp::{HasTimestamps, NoTimestamps};
+pub use xdf_builder::XDFBuilder;
+use xmltree::Element;
+
+use crate::chunk_structs::{Tag};
+
+pub type StreamID = u32;
+const _: () = const {
+    assert!(size_of::<StreamID>() == 4, "StreamID should be 4 bytes long");
+};
 
 pub struct XDFMeta {
     pub description: String,
@@ -22,117 +34,136 @@ pub struct XDFMeta {
     pub date: String,
 }
 
-struct FooterInfo {
-    first_timestamp: Option<f64>,
-    last_timestamp: Option<f64>,
-    sample_count: usize,
+pub(crate) struct WriteHelper<W: Write> {
+    writer: W,
 }
 
-pub struct XDFWriter<Dest: Write> {
-    writer: Dest,
-    footer_info: Vec<FooterInfo>,
+impl<W: Write> WriteHelper<W> {
+    fn write_magic_num(&mut self) -> Result<(), std::io::Error> {
+        const MAGIC_NUM: &[u8; 4] = b"XDF:";
+        self.writer.write_all(MAGIC_NUM)?;
+        Ok(())
+    }
+
+    pub(crate) fn write_file_header(&mut self, xml: &Element) -> Result<(), XDFWriterError> {
+        self.write_magic_num()?;
+
+        let mut xml_bytes = Vec::new();
+        xml.write(&mut xml_bytes)?;
+
+        self.write_chunk(Tag::FileHeader, &xml_bytes)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn write_stream_header(&mut self, id: StreamID, xml: &Element) -> Result<(), XDFWriterError> {
+        let id_bytes = id.to_le_bytes();
+        debug_assert!(id_bytes.len() == 4, "Stream ID should be 4 bytes long");
+
+        let mut bytes = Vec::from(id_bytes);
+
+        xml.write(&mut bytes)?;
+
+        self.write_chunk(Tag::StreamHeader, &bytes)?;
+
+        Ok(())
+    }
+
+    // in place to prematurely optimise away an allocation we already do in write_chunk
+    pub(crate) fn length_helper(length: usize, dest: &mut Vec<u8>) {
+        const U8_MAX: usize = u8::MAX as usize;
+        const U8_MAX_1: usize = U8_MAX + 1;
+
+        const U32_MAX: usize = u32::MAX as usize;
+        const U32_MAX_1: usize = U32_MAX + 1;
+
+        let num_length_bytes: u8 = match length {
+            0..=U8_MAX => 1,
+            U8_MAX_1..=U32_MAX => 4,
+            U32_MAX_1.. => 8,
+        };
+
+        let length_bytes = &length.to_le_bytes()[..num_length_bytes as usize];
+
+        dest.push(num_length_bytes);
+        dest.extend_from_slice(length_bytes);
+    }
+
+    pub(crate) fn write_num_samples_chunk<F: StreamFormat + NumberFormat>(
+        &mut self,
+        id: StreamID,
+        samples: &[F],
+    ) -> Result<(), std::io::Error> {
+        todo!()
+    }
+
+    pub(crate) fn write_str_samples_chunk(&mut self, id: StreamID, sample: &str) -> Result<(), std::io::Error> {
+        todo!()
+    }
+
+    pub(crate) fn write_chunk(&mut self, chunk_tag: Tag, chunk_bytes: &[u8]) -> Result<(), std::io::Error> {
+        // 2 tag bytes, 1 num length byte, max. 8 length bytes, and chunk bytes
+        let mut bytes = Vec::with_capacity(2 + 1 + 8 + chunk_bytes.len());
+
+        // two tag bytes which specify what kind of chunk it is
+        let tag_bytes: [u8; 2] = chunk_tag.into();
+        bytes.extend_from_slice(&tag_bytes);
+
+        // one byte specifying the number of length bytes, and then N bytes containing the actual length
+        Self::length_helper(chunk_bytes.len(), &mut bytes);
+
+        // the chunk's actual byte content
+        bytes.extend_from_slice(chunk_bytes);
+
+        self.writer.write_all(&bytes)?;
+
+        Ok(())
+    }
+}
+
+pub(crate) struct SharedState<W: Write> {
+    write_helper: WriteHelper<W>,
+}
+
+#[must_use]
+pub struct XDFWriter<W: Write> {
+    state: Arc<Mutex<SharedState<W>>>,
+    num_streams: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
     channel_count: usize,
-    nominal_srate: Option<f64>,
-    name: String,
-    content_type: String,
+    nominal_srate: Option<NonZeroPositiveF64>,
+    // name: String,
+    // content_type: String,
 }
 
-impl<Dest: Write> XDFWriter<Dest> {
-    pub(crate) fn new(writer: Dest) -> Self {
+impl StreamInfo {
+    #[allow(clippy::must_use_candidate)] // false positive
+    pub fn new(channel_count: usize, nominal_srate: Option<NonZeroPositiveF64>) -> Self {
+        Self {
+            channel_count,
+            nominal_srate,
+        }
+    }
+}
+
+impl<W: Write> XDFWriter<W> {
+    // only to be called by the XDFBuilder
+    pub(crate) fn new(write_helper: WriteHelper<W>) -> Self {
         // the specification suggests ordinal numbers starting at 1
         Self {
-            writer,
-            footer_info: Vec::new(),
+            state: Arc::new(Mutex::new(SharedState { write_helper })),
+            num_streams: 0,
         }
     }
 
-    pub fn add_stream<T: StreamFormat>(&mut self, stream_info: StreamInfo) -> Result<StreamHandle<T>, XDFWriterError> {
-        self.footer_info.push(FooterInfo {
-            first_timestamp: None,
-            last_timestamp: None,
-            sample_count: 0,
-        });
+    pub fn add_stream<F: StreamFormat, T: Timestamped>(&mut self, stream_info: StreamInfo) -> StreamBuilder<W, F, T> {
+        // // Spec says to start at 1, so get the length after incrementing
+        self.num_streams += 1;
+        let stream_id = self.num_streams;
 
-        // Spec says to start at 1, so get the length after pushing
-        let stream_id = u32::try_from(self.footer_info.len())?;
-
-        let handle = StreamHandle::new(stream_id, stream_info);
-        self.writer.write_all(&handle.chunk_bytes()?)?;
-
-        Ok(handle)
+        StreamBuilder::new(stream_id, stream_info, self.state.clone())
     }
-
-    pub fn write_num_samples<T: StreamFormat>(
-        &mut self,
-        handle: &StreamHandle<T>,
-        sample: &[&[T]],
-        timestamp: Option<f64>,
-    ) -> Result<(), XDFWriterError> {
-        assert!(
-            sample.len() == handle.stream_info.channel_count,
-            "Data length ({}) does not match stream channel count ({})",
-            sample.len(),
-            handle.stream_info.channel_count
-        );
-
-        // let mut bytes = Vec::new();
-        // let samples_bytes
-
-        todo!("Implement writing number samples")
-    }
-
-    pub fn write_string_sample<T: AsRef<str>>(
-        &mut self,
-        handle: &StreamHandle<&str>,
-        sample: T,
-        timestamp: Option<f64>,
-    ) -> Result<(), XDFWriterError> {
-        let len = sample.as_ref().len();
-
-        // let mut bytes = Vec::new();
-
-        todo!("implement writing string samples")
-    }
-}
-
-#[test]
-fn test_write_sample_int() {
-    let mut buffer = Vec::new();
-    let mut writer = XDFWriter::new(&mut buffer);
-
-    let stream_info = StreamInfo {
-        channel_count: 2,
-        nominal_srate: Some(100.0),
-        name: "Integer Stream".to_string(),
-        content_type: "EEG".to_string(),
-    };
-
-    let handle = writer.add_stream::<i32>(stream_info).unwrap();
-
-    let sample = [1, 2];
-    writer.write_num_samples(&handle, &[&sample], None).unwrap();
-    assert_ne!(buffer.len(), 0); // TODO write better test, this is mostly for type checking
-}
-
-#[test]
-fn test_write_sample_string() {
-    let mut buffer = Vec::new();
-    let mut writer = XDFWriter::new(&mut buffer);
-
-    let stream_info = StreamInfo {
-        channel_count: 1,
-        nominal_srate: None,
-        name: "String Stream".to_string(),
-        content_type: "Marker".to_string(),
-    };
-
-    let handle = writer.add_stream::<&str>(stream_info).unwrap();
-
-    let sample = "Hello 🦀!";
-    writer.write_string_sample(&handle, sample, None).unwrap();
-    assert_ne!(buffer.len(), 0); // TODO write better test, this is mostly for type checking
 }

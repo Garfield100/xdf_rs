@@ -4,7 +4,7 @@ use xmltree::Element;
 
 use crate::Format;
 
-use super::{StreamInfo, XDFWriterError};
+use super::{xdf_builder::xml_add_child_unchecked, StreamID, StreamInfo, XDFWriterError};
 macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {
         impl StreamFormat for $name {
@@ -40,12 +40,12 @@ pub struct StreamHandle<T: StreamFormat> {
     _format_marker: PhantomData<T>,
     // _writer_lifetime_marker: PhantomData<&'writer ()>,
     pub(crate) stream_info: StreamInfo,
-    pub(crate) stream_id: u32,
+    pub(crate) stream_id: StreamID,
 }
 
 impl<T: StreamFormat> StreamHandle<T> {
     // to be called by XDFWriter
-    pub(crate) fn new(stream_id: u32, stream_info: StreamInfo) -> Self {
+    pub(crate) fn new(stream_id: StreamID, stream_info: StreamInfo) -> Self {
         Self {
             stream_id,
             stream_info,
@@ -68,18 +68,14 @@ impl<T: StreamFormat> StreamHandle<T> {
 
 fn stream_xml_header<T: StreamFormat>(stream_info: &StreamInfo) -> Element {
     let mut header = Element::new("info");
-    header
-        .attributes
-        .insert("channel_count".to_string(), stream_info.channel_count.to_string());
+    xml_add_child_unchecked(&mut header, "channel_count", stream_info.channel_count.to_string());
 
     match stream_info.nominal_srate {
-        Some(srate) => header.attributes.insert("nominal_srate".to_string(), srate.to_string()),
-        None => header.attributes.insert("nominal_srate".to_string(), "0".to_string()),
-    };
+        Some(srate) => xml_add_child_unchecked(&mut header, "nominal_srate", srate.to_string()),
+        None => xml_add_child_unchecked(&mut header, "nominal_srate", "0"),
+    }
 
-    header
-        .attributes
-        .insert("format".to_string(), String::from(T::get_format()));
+    xml_add_child_unchecked(&mut header, "format", String::from(T::get_format()));
 
     header
 }

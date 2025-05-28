@@ -4,7 +4,7 @@
 #![warn(array_into_iter)]
 #![warn(missing_docs)]
 #![warn(rustdoc::all)]
-#![deny(clippy::pedantic)]
+// #![deny(clippy::pedantic)]
 #![allow(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
 #![crate_type = "lib"]
 #![crate_name = "xdf"]
@@ -47,7 +47,7 @@ pub use sample::Sample;
 mod streams;
 mod util;
 
-mod writer;
+pub mod writer;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
