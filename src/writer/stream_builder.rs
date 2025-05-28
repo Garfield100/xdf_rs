@@ -9,10 +9,17 @@ use std::{
 use crate::writer::StreamInfo;
 
 use super::{
-    error::XDFWriterError, stream_format::StreamFormat, stream_writer::StreamWriter, timestamp::Timestamped,
-    xdf_builder::xml_add_child_overwrite, StreamID,
+    error::XDFWriterError,
+    stream_format::StreamFormat,
+    stream_writer::StreamWriter,
+    timestamp::Timestamped,
+    xdf_builder::{xml_add_child_overwrite, HasMetadataAndDesc},
+    StreamID,
 };
 
+///
+///
+/// Overwritten top-level XML elements: `channel_count`, `nominal_srate`, `channel_format`.
 pub struct StreamBuilder<W: Write, F: StreamFormat, T: Timestamped> {
     pub(crate) id: StreamID,
     pub(crate) info: StreamInfo,
@@ -79,26 +86,14 @@ impl<W: Write, F: StreamFormat, T: Timestamped> StreamBuilder<W, F, T> {
     pub fn content_type<S: Into<String>>(self, content_type: S) -> Self {
         self.add_metadata_key("type", content_type)
     }
+}
 
-    pub fn add_desc_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
-        xml_add_child_overwrite(&mut self.desc, key, value);
-        self
-    }
-
-    /// Adds a key-value pair to the stream's XML metadata.
-    /// Note that the following 3 fields will be overwritten once the builder is finalised:`channel_count`, `nominal_srate`, `channel_format`.
-    // TODO example
-    pub fn add_metadata_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
-        xml_add_child_overwrite(&mut self.metadata, key, value);
-        self
-    }
-
-    /// Returns a mutable reference to an XML Element which will be used to generate the [stream header](https://github.com/sccn/xdf/wiki/Specifications#streamheader-chunk)'s XML metadata.
-    /// See other methods for more convenient ways of modifying this.
-    /// This direct access is only really necessary if you e.g. wish to add nested elements etc.
-    /// Do not rely on this containing anything at all
-    /// Also note that the following 3 fields will be overwritten once the builder is finalised: `channel_count`, `nominal_srate`, `channel_format`.
-    pub fn get_metadata_mut(&mut self) -> &mut Element {
+impl<W: Write, F: StreamFormat, T: Timestamped> HasMetadataAndDesc for StreamBuilder<W, F, T> {
+    fn get_metadata_mut(&mut self) -> &mut Element {
         &mut self.metadata
+    }
+
+    fn get_desc_mut(&mut self) -> &mut Element {
+        &mut self.desc
     }
 }

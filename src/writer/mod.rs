@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use stream_format::{NumberFormat, StreamFormat};
+use stream_format::StreamFormat;
 
 mod error;
 mod stream_builder;
@@ -18,25 +18,50 @@ use stream_builder::StreamBuilder;
 pub use strict_num::NonZeroPositiveF64;
 use timestamp::Timestamped;
 pub use timestamp::{HasTimestamps, NoTimestamps};
-pub use xdf_builder::XDFBuilder;
+pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
 use xmltree::Element;
 
-use crate::chunk_structs::{Tag};
+use crate::chunk_structs::Tag;
 
-pub type StreamID = u32;
+pub(crate) type StreamID = u32;
+
 const _: () = const {
     assert!(size_of::<StreamID>() == 4, "StreamID should be 4 bytes long");
 };
 
-pub struct XDFMeta {
-    pub description: String,
-    pub author: String,
-    pub date: String,
-}
-
 pub(crate) struct WriteHelper<W: Write> {
     writer: W,
 }
+
+fn length_helper(length: usize, num_length_bytes: u8) -> [u8; 9] {
+    let mut arr = [0; 9];
+    arr[0] = num_length_bytes;
+    let length_bytes = length.to_le_bytes();
+    arr[1..].copy_from_slice(&length_bytes);
+
+    arr
+}
+
+macro_rules! length_bytes {
+    ($length:expr) => {{
+        use crate::writer::length_helper;
+        const U8_MAX: usize = u8::MAX as usize;
+        const U8_MAX_1: usize = U8_MAX + 1;
+
+        const U32_MAX: usize = u32::MAX as usize;
+        const U32_MAX_1: usize = U32_MAX + 1;
+
+        let num_length_bytes: u8 = match $length {
+            0..=U8_MAX => 1,
+            U8_MAX_1..=U32_MAX => 4,
+            U32_MAX_1.. => 8,
+        };
+
+        &length_helper($length, num_length_bytes)[..num_length_bytes as usize + 1]
+    }};
+}
+
+pub(crate) use length_bytes;
 
 impl<W: Write> WriteHelper<W> {
     fn write_magic_num(&mut self) -> Result<(), std::io::Error> {
@@ -69,53 +94,26 @@ impl<W: Write> WriteHelper<W> {
         Ok(())
     }
 
-    // in place to prematurely optimise away an allocation we already do in write_chunk
-    pub(crate) fn length_helper(length: usize, dest: &mut Vec<u8>) {
-        const U8_MAX: usize = u8::MAX as usize;
-        const U8_MAX_1: usize = U8_MAX + 1;
-
-        const U32_MAX: usize = u32::MAX as usize;
-        const U32_MAX_1: usize = U32_MAX + 1;
-
-        let num_length_bytes: u8 = match length {
-            0..=U8_MAX => 1,
-            U8_MAX_1..=U32_MAX => 4,
-            U32_MAX_1.. => 8,
-        };
-
-        let length_bytes = &length.to_le_bytes()[..num_length_bytes as usize];
-
-        dest.push(num_length_bytes);
-        dest.extend_from_slice(length_bytes);
+    pub(crate) fn get_writer(&mut self) -> &mut W {
+        &mut self.writer
     }
 
-    pub(crate) fn write_num_samples_chunk<F: StreamFormat + NumberFormat>(
-        &mut self,
-        id: StreamID,
-        samples: &[F],
-    ) -> Result<(), std::io::Error> {
-        todo!()
-    }
-
-    pub(crate) fn write_str_samples_chunk(&mut self, id: StreamID, sample: &str) -> Result<(), std::io::Error> {
-        todo!()
-    }
-
-    pub(crate) fn write_chunk(&mut self, chunk_tag: Tag, chunk_bytes: &[u8]) -> Result<(), std::io::Error> {
-        // 2 tag bytes, 1 num length byte, max. 8 length bytes, and chunk bytes
-        let mut bytes = Vec::with_capacity(2 + 1 + 8 + chunk_bytes.len());
-
-        // two tag bytes which specify what kind of chunk it is
-        let tag_bytes: [u8; 2] = chunk_tag.into();
-        bytes.extend_from_slice(&tag_bytes);
+    fn write_chunk(&mut self, chunk_tag: Tag, chunk_bytes: &[u8]) -> Result<(), std::io::Error> {
+        // 1 num length byte, max. 8 length bytes, 2 Tag bytes, and chunk bytes
+        // let mut bytes = Vec::with_capacity(1 + 8 + 2 + chunk_bytes.len());
 
         // one byte specifying the number of length bytes, and then N bytes containing the actual length
-        Self::length_helper(chunk_bytes.len(), &mut bytes);
+        // bytes.extend_from_slice(length_bytes!(chunk_bytes.len()));
+        self.writer.write_all(length_bytes!(chunk_bytes.len()))?;
+
+        // two tag bytes which specify what kind of chunk it is
+        let tag_bytes: [u8; 2] = chunk_tag.as_bytes();
+        // bytes.extend_from_slice(&tag_bytes);
+        self.writer.write_all(&tag_bytes)?;
 
         // the chunk's actual byte content
-        bytes.extend_from_slice(chunk_bytes);
-
-        self.writer.write_all(&bytes)?;
+        // bytes.extend_from_slice(chunk_bytes);
+        self.writer.write_all(chunk_bytes)?;
 
         Ok(())
     }

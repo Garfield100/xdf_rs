@@ -1,6 +1,7 @@
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData};
 
 use xmltree::Element;
+use zerocopy::{Immutable, IntoBytes};
 
 use crate::Format;
 
@@ -15,7 +16,7 @@ macro_rules! define_stream_type {
     };
 }
 
-pub(crate) trait StreamFormat: Sized {
+pub(crate) trait StreamFormat: Sized + Debug + Immutable {
     fn get_format() -> Format;
 }
 
@@ -27,7 +28,7 @@ define_stream_type!(f32, Format::Float32);
 define_stream_type!(f64, Format::Float64);
 define_stream_type!(&str, Format::String);
 
-pub(crate) trait NumberFormat {}
+pub(crate) trait NumberFormat: IntoBytes {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}
 impl NumberFormat for i32 {}

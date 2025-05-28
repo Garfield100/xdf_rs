@@ -13,6 +13,8 @@ pub enum XDFWriterError {
     Conversion(#[from] std::num::TryFromIntError),
     #[error("XDFWriter Mutex is poisoned")]
     PoisonError,
+    #[error("Expected {expected} values for {expected} channels but got {actual} values")]
+    LengthMismatch { expected: usize, actual: usize },
 }
 
 // TODO restrict this immpl somewhat

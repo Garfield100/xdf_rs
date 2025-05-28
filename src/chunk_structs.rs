@@ -92,9 +92,9 @@ pub(crate) enum Tag {
     StreamFooter,
 }
 
-impl From<Tag> for [u8; 2] {
-    fn from(tag: Tag) -> Self {
-        match tag {
+impl Tag {
+    pub(crate) const fn as_bytes(&self) -> [u8; 2] {
+        match self {
             Tag::FileHeader => [1, 0],
             Tag::StreamHeader => [2, 0],
             Tag::Samples => [3, 0],

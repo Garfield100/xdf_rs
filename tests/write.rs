@@ -1,4 +1,4 @@
-use xdf::writer::{HasTimestamps, StreamInfo, XDFBuilder};
+use xdf::writer::{HasMetadataAndDesc, HasTimestamps, StreamInfo, XDFBuilder};
 
 #[test]
 fn write_simple() {
