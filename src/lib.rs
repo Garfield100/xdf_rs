@@ -116,7 +116,7 @@ impl From<Format> for String {
             Format::Int32 => "int32".to_string(),
             Format::Int64 => "int64".to_string(),
             Format::Float32 => "float32".to_string(),
-            Format::Float64 => "float64".to_string(),
+            Format::Float64 => "double64".to_string(),
             Format::String => "string".to_string(),
         }
     }

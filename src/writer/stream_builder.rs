@@ -12,7 +12,7 @@ use super::{
     error::XDFWriterError,
     stream_format::StreamFormat,
     stream_writer::StreamWriter,
-    timestamp::Timestamped,
+    timestamp::TimestampTrait,
     xdf_builder::{xml_add_child_overwrite, HasMetadataAndDesc},
     StreamID,
 };
@@ -20,7 +20,7 @@ use super::{
 ///
 ///
 /// Overwritten top-level XML elements: `channel_count`, `nominal_srate`, `channel_format`.
-pub struct StreamBuilder<W: Write, F: StreamFormat, T: Timestamped> {
+pub struct StreamBuilder<W: Write, F: StreamFormat, T: TimestampTrait> {
     pub(crate) id: StreamID,
     pub(crate) info: StreamInfo,
     pub(crate) state: Arc<Mutex<SharedState<W>>>,
@@ -30,7 +30,7 @@ pub struct StreamBuilder<W: Write, F: StreamFormat, T: Timestamped> {
     _format_marker: std::marker::PhantomData<F>,
 }
 
-impl<W: Write, F: StreamFormat, T: Timestamped> StreamBuilder<W, F, T> {
+impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamBuilder<W, F, T> {
     pub(crate) fn new(id: StreamID, info: StreamInfo, state: Arc<Mutex<SharedState<W>>>) -> Self {
         Self {
             id,
@@ -74,6 +74,9 @@ impl<W: Write, F: StreamFormat, T: Timestamped> StreamBuilder<W, F, T> {
             state: self.state,
             info: self.info,
             id: self.id,
+            first_timestamp: None,
+            last_timestamp: None,
+            num_samples_written: 0,
             _timestamp_marker: std::marker::PhantomData::<T>,
             _format_marker: std::marker::PhantomData::<F>,
         })
@@ -88,7 +91,7 @@ impl<W: Write, F: StreamFormat, T: Timestamped> StreamBuilder<W, F, T> {
     }
 }
 
-impl<W: Write, F: StreamFormat, T: Timestamped> HasMetadataAndDesc for StreamBuilder<W, F, T> {
+impl<W: Write, F: StreamFormat, T: TimestampTrait> HasMetadataAndDesc for StreamBuilder<W, F, T> {
     fn get_metadata_mut(&mut self) -> &mut Element {
         &mut self.metadata
     }

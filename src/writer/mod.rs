@@ -16,7 +16,7 @@ mod xdf_builder;
 use error::XDFWriterError;
 use stream_builder::StreamBuilder;
 pub use strict_num::NonZeroPositiveF64;
-use timestamp::Timestamped;
+use timestamp::TimestampTrait;
 pub use timestamp::{HasTimestamps, NoTimestamps};
 pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
 use xmltree::Element;
@@ -83,13 +83,23 @@ impl<W: Write> WriteHelper<W> {
 
     pub(crate) fn write_stream_header(&mut self, id: StreamID, xml: &Element) -> Result<(), XDFWriterError> {
         let id_bytes = id.to_le_bytes();
-        debug_assert!(id_bytes.len() == 4, "Stream ID should be 4 bytes long");
 
         let mut bytes = Vec::from(id_bytes);
 
         xml.write(&mut bytes)?;
 
         self.write_chunk(Tag::StreamHeader, &bytes)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn write_stream_footer(&mut self, id: StreamID, xml: &Element) -> Result<(), XDFWriterError> {
+        let id_bytes = id.to_le_bytes();
+        let mut bytes = Vec::from(id_bytes);
+
+        xml.write(&mut bytes)?;
+
+        self.write_chunk(Tag::StreamFooter, &bytes)?;
 
         Ok(())
     }
@@ -102,12 +112,13 @@ impl<W: Write> WriteHelper<W> {
         // 1 num length byte, max. 8 length bytes, 2 Tag bytes, and chunk bytes
         // let mut bytes = Vec::with_capacity(1 + 8 + 2 + chunk_bytes.len());
 
-        // one byte specifying the number of length bytes, and then N bytes containing the actual length
-        // bytes.extend_from_slice(length_bytes!(chunk_bytes.len()));
-        self.writer.write_all(length_bytes!(chunk_bytes.len()))?;
-
         // two tag bytes which specify what kind of chunk it is
         let tag_bytes: [u8; 2] = chunk_tag.as_bytes();
+
+        // one byte specifying the number of length bytes, and then N bytes containing the actual length, including the tag
+        self.writer
+            .write_all(length_bytes!(chunk_bytes.len() + tag_bytes.len()))?;
+
         // bytes.extend_from_slice(&tag_bytes);
         self.writer.write_all(&tag_bytes)?;
 
@@ -157,7 +168,10 @@ impl<W: Write> XDFWriter<W> {
         }
     }
 
-    pub fn add_stream<F: StreamFormat, T: Timestamped>(&mut self, stream_info: StreamInfo) -> StreamBuilder<W, F, T> {
+    pub fn add_stream<F: StreamFormat, T: TimestampTrait>(
+        &mut self,
+        stream_info: StreamInfo,
+    ) -> StreamBuilder<W, F, T> {
         // // Spec says to start at 1, so get the length after incrementing
         self.num_streams += 1;
         let stream_id = self.num_streams;
