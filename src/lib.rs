@@ -61,7 +61,7 @@ use crate::parsers::xdf_file::xdf_file_parser;
 type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
-/// XDF file struct  
+/// XDF file struct
 /// The main struct representing an XDF file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct XDFFile {
@@ -69,7 +69,6 @@ pub struct XDFFile {
     pub version: f32,
     /// The XML header of the XDF file as an [`xmltree::Element`].
     pub header: xmltree::Element,
-
     /// A vector of streams contained in the XDF file.
     pub streams: Vec<Stream>,
 }
