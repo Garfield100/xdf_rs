@@ -61,7 +61,7 @@ use crate::parsers::xdf_file::xdf_file_parser;
 type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
-/// XDF file struct  
+/// XDF file struct
 /// The main struct representing an XDF file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct XDFFile {
@@ -69,7 +69,6 @@ pub struct XDFFile {
     pub version: f32,
     /// The XML header of the XDF file as an [`xmltree::Element`].
     pub header: xmltree::Element,
-
     /// A vector of streams contained in the XDF file.
     pub streams: Vec<Stream>,
 }
@@ -291,13 +290,12 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             let first_timestamp: Option<f64> = samples_vec.first().and_then(|s| s.timestamp);
             let last_timestamp: Option<f64> = samples_vec.last().and_then(|s| s.timestamp);
 
-            if let (num_samples, Some(first_timestamp), Some(last_timestamp)) =
-                (samples_vec.len(), first_timestamp, last_timestamp)
-            {
-                if num_samples == 0 {
+            if let (Some(first_timestamp), Some(last_timestamp)) = (first_timestamp, last_timestamp) {
+                let delta = last_timestamp - first_timestamp;
+                if delta <= 0.0 || !delta.is_finite() {
                     None // don't divide by zero :)
                 } else {
-                    Some((last_timestamp - first_timestamp) / num_samples as f64)
+                    Some(samples_vec.len() as f64 / delta)
                 }
             } else {
                 None
