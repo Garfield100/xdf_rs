@@ -7,7 +7,7 @@ const EPSILON: f64 = 1E-15;
 #[allow(clippy::too_many_lines)]
 #[test]
 fn read_minimal_xdf() {
-    let file_path = "tests/minimal.xdf";
+    let file_path = "tests/read/minimal.xdf";
     let bytes = fs::read(file_path).unwrap();
     let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
@@ -206,7 +206,7 @@ fn fail_on_invalid_xdf() {
 #[test]
 fn out_of_order_clock_offsets() {
     // this was discovered by fuzzing
-    let file_path = "tests/out_of_order_clock_offsets.xdf";
+    let file_path = "tests/read/out_of_order_clock_offsets.xdf";
     let bytes = fs::read(file_path).unwrap();
 
     let _xdf_file = XDFFile::from_bytes(&bytes);
@@ -215,7 +215,7 @@ fn out_of_order_clock_offsets() {
 #[test]
 fn chunk_length_lie() {
     // this was discovered by fuzzing
-    let file_path = "tests/chunk_length_lie.xdf";
+    let file_path = "tests/read/chunk_length_lie.xdf";
     let bytes = fs::read(file_path).unwrap();
 
     let _xdf_file = XDFFile::from_bytes(&bytes);
@@ -225,7 +225,7 @@ fn chunk_length_lie() {
 // If I've understood correctly this contains a chunk which is
 fn out_of_order_sample_chunk() {
     // this was discovered by fuzzing
-    let file_path = "tests/out_of_order_sample_chunk.xdf";
+    let file_path = "tests/read/out_of_order_sample_chunk.xdf";
     let bytes = fs::read(file_path).unwrap();
 
     let _xdf_file = XDFFile::from_bytes(&bytes);

@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_xdf_file() {
         // load minimal.xdf which is included in the repo
-        let input = include_bytes!("../../tests/minimal.xdf");
+        let input = include_bytes!("../../tests/read/minimal.xdf");
 
         let (rest, chunks) = xdf_file_parser(input).unwrap();
 

@@ -13,6 +13,7 @@ fn str_to_format(input: &str) -> Option<Format> {
         "int8" => Some(Format::Int8),
         "int16" => Some(Format::Int16),
         "int32" => Some(Format::Int32),
+        "int64" => Some(Format::Int64),
         "float32" => Some(Format::Float32),
         "double64" => Some(Format::Float64),
         "string" => Some(Format::String),

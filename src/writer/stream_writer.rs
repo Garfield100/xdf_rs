@@ -85,8 +85,17 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamWriter<W, F, T> {
 }
 
 // implementation for numeric types
-impl<W: Write, F: StreamFormat + NumberFormat, T: TimestampTrait> StreamWriter<W, F, T> {
-    pub fn write_samples(&mut self, samples: &[&[F]], first_timestamp: PositiveF64) -> Result<(), XDFWriterError> {
+impl<W, F, T> StreamWriter<W, F, T>
+where
+    W: Write,
+    F: StreamFormat + NumberFormat,
+    T: TimestampTrait,
+{
+    pub fn write_samples<S: AsRef<[F]>>(
+        &mut self,
+        samples: &[S],
+        first_timestamp: PositiveF64,
+    ) -> Result<(), XDFWriterError> {
         let mut state_lock = self.state.lock()?;
         let write_helper = &mut state_lock.write_helper;
 
@@ -120,11 +129,11 @@ impl<W: Write, F: StreamFormat + NumberFormat, T: TimestampTrait> StreamWriter<W
 
         // timestamp for the first one if applicable
 
-        for &sample in samples {
-            if sample.len() != self.info.channel_count {
+        for sample in samples {
+            if sample.as_ref().len() != self.info.channel_count {
                 return Err(XDFWriterError::LengthMismatch {
                     expected: self.info.channel_count,
-                    actual: sample.len(),
+                    actual: sample.as_ref().len(),
                 });
             }
             if T::is_timestamped() && first {
@@ -141,7 +150,7 @@ impl<W: Write, F: StreamFormat + NumberFormat, T: TimestampTrait> StreamWriter<W
             first = false;
 
             // write values themselves
-            let value_bytes: &[u8] = sample.as_bytes();
+            let value_bytes: &[u8] = (*sample.as_ref()).as_bytes();
             writer.write_all(value_bytes)?;
         }
 

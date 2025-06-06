@@ -8,7 +8,7 @@ use stream_format::StreamFormat;
 
 mod error;
 mod stream_builder;
-mod stream_format;
+pub mod stream_format;
 mod stream_writer;
 mod timestamp;
 mod xdf_builder;
@@ -142,8 +142,8 @@ pub struct XDFWriter<W: Write> {
 
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
-    channel_count: usize,
-    nominal_srate: Option<NonZeroPositiveF64>,
+    pub channel_count: usize,
+    pub nominal_srate: Option<NonZeroPositiveF64>,
     // name: String,
     // content_type: String,
 }

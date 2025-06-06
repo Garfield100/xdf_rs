@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use crate::{Format, Sample};
 
@@ -20,8 +19,8 @@ pub struct Stream {
     pub format: Format,
 
     // optional fields:
-    pub name: Option<Arc<str>>,
-    pub r#type: Option<Arc<str>>,
+    pub name: Option<String>,
+    pub content_type: Option<String>,
 
     pub header: xmltree::Element, //contains desc
     pub footer: Option<xmltree::Element>,

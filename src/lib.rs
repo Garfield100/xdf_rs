@@ -27,7 +27,7 @@
 //!# use std::fs;
 //!# use xdf::XDFFile;
 //!# fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!let bytes = fs::read("tests/minimal.xdf")?;
+//!let bytes = fs::read("tests/read/minimal.xdf")?;
 //!let xdf_file = XDFFile::from_bytes(&bytes)?;
 //!# Ok(())
 //!# }
@@ -143,7 +143,7 @@ impl XDFFile {
     # use std::fs;
     # use xdf::XDFFile;
     # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let bytes = fs::read("tests/minimal.xdf")?;
+    let bytes = fs::read("tests/read/minimal.xdf")?;
     let xdf_file = XDFFile::from_bytes(&bytes)?;
     # Ok(())
     # }
@@ -272,13 +272,9 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     for (stream_id, stream_header) in stream_header_map {
         let stream_footer = stream_footer_map.remove(&stream_id);
 
-        let name = stream_header.info.name.as_ref().map(|name| Arc::from(name.as_str()));
+        let name = stream_header.info.name;
 
-        let stream_type = stream_header
-            .info
-            .stream_type
-            .as_ref()
-            .map(|stream_type| Arc::from(stream_type.as_str()));
+        let stream_type = stream_header.info.stream_type;
 
         let mut stream_offsets = grouped_chunks
             .clock_offsets
@@ -329,7 +325,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             format: stream_header.info.channel_format,
 
             name,
-            r#type: stream_type,
+            content_type: stream_type,
             header: stream_header.xml,
             footer: stream_footer.map(|s| s.xml),
             measured_srate,
