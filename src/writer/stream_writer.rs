@@ -55,13 +55,20 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> Drop for StreamWriter<W, F, T
     }
 }
 
-// for all stream types
+// general functions independent of stream type
 impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamWriter<W, F, T> {
     pub fn close(mut self) -> Result<(), XDFWriterError> {
         // write the stream footer
         self.close_helper()?;
 
         Ok(())
+    }
+
+    // TODO tests
+    pub fn write_boundary(&mut self) -> Result<(), XDFWriterError> {
+        let mut state_lock = self.state.lock()?;
+        let write_helper = &mut state_lock.write_helper;
+        write_helper.write_boundary()
     }
 
     fn close_helper(&mut self) -> Result<(), XDFWriterError> {

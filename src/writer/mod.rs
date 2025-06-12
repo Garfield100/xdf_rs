@@ -104,6 +104,16 @@ impl<W: Write> WriteHelper<W> {
         Ok(())
     }
 
+    pub(crate) fn write_boundary(&mut self) -> Result<(), XDFWriterError> {
+        const BOUNDARY_BYTES: [u8; 16] = [
+            0x43, 0xA5, 0x46, 0xDC, 0xCB, 0xF5, 0x41, 0x0F, 0xB3, 0x0E, 0xD5, 0x46, 0x73, 0x83, 0xCB, 0xE4,
+        ];
+
+        self.write_chunk(Tag::Boundary, &BOUNDARY_BYTES)?;
+
+        Ok(())
+    }
+
     pub(crate) fn get_writer(&mut self) -> &mut W {
         &mut self.writer
     }
@@ -177,5 +187,11 @@ impl<W: Write> XDFWriter<W> {
         let stream_id = self.num_streams;
 
         StreamBuilder::new(stream_id, stream_info, self.state.clone())
+    }
+
+    pub fn write_boundary(&mut self) -> Result<(), XDFWriterError> {
+        let mut state_lock = self.state.lock()?;
+        let write_helper = &mut state_lock.write_helper;
+        write_helper.write_boundary()
     }
 }
