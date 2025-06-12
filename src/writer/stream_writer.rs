@@ -43,12 +43,6 @@ pub struct StreamWriter<W: Write, F: StreamFormat, T: TimestampTrait> {
     pub(crate) _format_marker: std::marker::PhantomData<F>,
 }
 
-// impl<W: Write, F: StreamFormat, T: Timestamped> StreamWriter<W, F, T> {
-//     pub fn end_stream(self) {
-//         drop(self);
-//     }
-// }
-
 impl<W: Write, F: StreamFormat, T: TimestampTrait> Drop for StreamWriter<W, F, T> {
     fn drop(&mut self) {
         self.close_helper().expect("Failed to close stream writer properly");
@@ -64,11 +58,22 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamWriter<W, F, T> {
         Ok(())
     }
 
-    // TODO tests
+    // TODO write tests for boundary writing
     pub fn write_boundary(&mut self) -> Result<(), XDFWriterError> {
         let mut state_lock = self.state.lock()?;
         let write_helper = &mut state_lock.write_helper;
         write_helper.write_boundary()
+    }
+
+    // TODO write tests for clock offset writing
+    pub fn write_clock_offset(
+        &mut self,
+        collection_time: PositiveF64,
+        offset: PositiveF64,
+    ) -> Result<(), XDFWriterError> {
+        let mut state_lock = self.state.lock()?;
+        let write_helper = &mut state_lock.write_helper;
+        write_helper.write_clock_offset(self.id, collection_time, offset)
     }
 
     fn close_helper(&mut self) -> Result<(), XDFWriterError> {
@@ -95,7 +100,8 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamWriter<W, F, T> {
     }
 }
 
-// TODO minimise critical section
+// TODO minimise critical sections
+// TODO deduplicate code
 // implementation for timestamped number types
 impl<W, F> StreamWriter<W, F, HasTimestamps>
 where

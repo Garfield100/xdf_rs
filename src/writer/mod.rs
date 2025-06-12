@@ -16,6 +16,7 @@ mod xdf_builder;
 use error::XDFWriterError;
 use stream_builder::StreamBuilder;
 pub use strict_num::NonZeroPositiveF64;
+use strict_num::PositiveF64;
 use timestamp::TimestampTrait;
 pub use timestamp::{HasTimestamps, NoTimestamps};
 pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
@@ -114,6 +115,26 @@ impl<W: Write> WriteHelper<W> {
         Ok(())
     }
 
+    pub(crate) fn write_clock_offset(
+        &mut self,
+        id: StreamID,
+        collection_time: PositiveF64,
+        offset_value: PositiveF64,
+    ) -> Result<(), XDFWriterError> {
+        let id_bytes = id.to_le_bytes();
+        let ct_bytes = collection_time.get().to_le_bytes();
+        let off_bytes = offset_value.get().to_le_bytes();
+
+        // one day we will be able to do this in place without unsafe qwq. Is optimised out anyway.
+        let mut bytes: [u8; 20] = [0; 20];
+        bytes[0..4].copy_from_slice(&id_bytes);
+        bytes[4..12].copy_from_slice(&ct_bytes);
+        bytes[12..20].copy_from_slice(&off_bytes);
+
+        self.write_chunk(Tag::ClockOffset, &bytes)?;
+
+        Ok(())
+    }
     pub(crate) fn get_writer(&mut self) -> &mut W {
         &mut self.writer
     }
