@@ -1,6 +1,7 @@
 use paste::paste;
 use std::{fs, vec};
 use test_log::test;
+use tracing::debug;
 use zerocopy::{Immutable, IntoBytes};
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
@@ -78,7 +79,7 @@ fn write_simple_num<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> + I
     drop(stream);
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    println!("Parsed XDFFile: {:#?}", parsed);
+    debug!(?parsed);
 
     assert_eq!(parsed.version, 1.0);
 
@@ -130,7 +131,7 @@ fn write_simple_str_two_ch() {
     fs::write("str_test.xdf", &buffer).expect("Could not write file");
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    println!("Parsed XDFFile: {:#?}", parsed);
+    debug!(?parsed);
 
     assert_eq!(parsed.version, 1.0);
 
@@ -183,7 +184,7 @@ fn write_simple_str_one_ch() {
     // fs::write("str_test.xdf", &buffer).expect("Could not write file");
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    println!("Parsed XDFFile: {:#?}", parsed);
+    debug!(?parsed);
 
     assert_eq!(parsed.version, 1.0);
 

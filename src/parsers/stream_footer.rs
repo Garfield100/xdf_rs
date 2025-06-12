@@ -1,4 +1,5 @@
 use nom::{error::context, IResult};
+use tracing::instrument;
 
 use crate::StreamFooterChunk;
 
@@ -9,6 +10,7 @@ use super::{chunk_content, chunk_tags::stream_footer_tag, stream_id, xml};
 // [Ordinal number] [[Valid XML]]
 // [4] [As determined by chunk length]
 
+#[instrument(level = "trace", ret)]
 pub(crate) fn stream_footer(input: &[u8]) -> IResult<&[u8], StreamFooterChunk> {
     let (input, chunk_content) = context("stream_footer chunk_content", chunk_content)(input)?;
 

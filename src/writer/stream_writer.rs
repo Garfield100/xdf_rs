@@ -278,10 +278,6 @@ where
         let mut state_lock = self.state.lock()?;
         let write_helper = &mut state_lock.write_helper;
         let writer = write_helper.get_writer();
-        // let mut all_length_bytes = Vec::with_capacity(samples.len() * 2); // estimate most strings to be shorter than 255 bytes
-        // let mut total_strings_size: usize = 0; //size of the strings in bytes, without any length bytes
-        // let mut num_length_bytes: usize = 0; // total number of length bytes used for all strings
-        // let mut sample_lengths: Vec<usize> = Vec::with_capacity(samples.len());
         let mut sample_lengths_sum: usize = 0; // the sum of all samples in bytes, including their timestamps and length bytes
 
         // because we can't know the size of the strings for this chunk in advance, we have to go through it twice
@@ -313,18 +309,11 @@ where
                     // TODO investigate whether it's better to allocate and store these length bytes or to just recalculate later
                     let value_length_bytes_len = length_bytes!(value_bytes_len).len();
                     sample_content_byte_size += value_bytes_len + value_length_bytes_len;
-
-                    // num_length_bytes += value_length_bytes.len();
-                    // total_strings_size += value_bytes.len();
-                    // all_length_bytes.push(value_length_bytes);
                 }
 
-                let sample_length_bytes = length_bytes!(sample_content_byte_size);
+                trace!("Writing string sample of length {sample_content_byte_size}.");
 
-                trace!("Writing string sample of length {sample_content_byte_size} and length bytes: {sample_length_bytes:?}.");
-
-                let sample_byte_length = sample_content_byte_size + sample_length_bytes.len();
-                sample_lengths_sum += sample_byte_length;
+                sample_lengths_sum += sample_content_byte_size;
             }
         }
         // second pass, now we can write

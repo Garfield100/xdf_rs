@@ -171,9 +171,6 @@ fn read_minimal_xdf() {
                 let mut expected = vec![expected.to_string()];
                 expected[0].retain(|c| !c.is_whitespace()); // [0] only because we know minimal.xdf only has a single string value here
 
-                dbg!(&actual_string);
-                dbg!(&expected);
-
                 assert_eq!(
                     actual_string, expected,
                     "Unexpected value in second stream. Expected \n{expected:?}\n, got \n{actual_string:?}\n"
