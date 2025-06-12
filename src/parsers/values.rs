@@ -1,4 +1,5 @@
 use nom::{combinator, error::context, multi, number, IResult};
+use tracing::{instrument, trace};
 
 use crate::{Format, Values};
 
@@ -11,6 +12,8 @@ use super::chunk_length::length;
 
 fn string_value(input: &[u8]) -> IResult<&[u8], String> {
     let (input, length) = length(input)?;
+    trace!("String value is {length} bytes long");
+
     let (input, string_bytes) = nom::bytes::complete::take(length)(input)?;
     let Ok(string) = String::from_utf8(string_bytes.to_vec()) else {
         return context("string_value invalid utf8", combinator::fail)(&[0]);
@@ -23,7 +26,7 @@ fn string_value(input: &[u8]) -> IResult<&[u8], String> {
 // [double, float, int64, int32, int16 or int8]
 // [Arbitrary]
 // [8, 4, 2 or 1]
-
+#[instrument(level = "trace", skip(input), ret)]
 pub(super) fn values(input: &[u8], format: Format, num_values: usize) -> IResult<&[u8], Values> {
     let mut input = input;
     let values = match format {
@@ -58,9 +61,9 @@ pub(super) fn values(input: &[u8], format: Format, num_values: usize) -> IResult
             Values::Int64(values)
         }
         Format::String => {
-            let (inp, string) = context("values String", string_value)(input)?;
+            let (inp, string) = context("values String", multi::count(string_value, num_values))(input)?;
             input = inp;
-            Values::String(string)
+            Values::Strings(string)
         }
     };
 

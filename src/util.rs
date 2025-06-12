@@ -25,14 +25,7 @@ pub(crate) fn get_text_from_child(root: &Element, child_name: &str) -> Result<St
         .to_string())
 }
 
-// #[derive(Debug, Error)]
-// pub(crate) struct NotFiniteError();
-// impl Display for NotFiniteError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         writeln!(f, "The provided f64 is not finite.")
-//     }
-// }
-
+// TODO this is only used internally, however since I'm using strict_num in the writer too now I should replace this with that
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub(crate) struct FiniteF64(f64);
 

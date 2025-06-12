@@ -44,6 +44,7 @@ mod errors;
 mod sample;
 pub use sample::Sample;
 
+// TODO rethink visibility/re-export of structs like Stream
 mod streams;
 mod util;
 
@@ -51,8 +52,8 @@ pub mod writer;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
-use log::warn;
 use streams::Stream;
+use tracing::{instrument, warn};
 use util::FiniteF64;
 
 use crate::chunk_structs::Chunk;
@@ -105,7 +106,7 @@ pub enum Values {
     Int64(Vec<i64>),
     Float32(Vec<f32>),
     Float64(Vec<f64>),
-    String(String),
+    Strings(Vec<String>),
 }
 
 impl From<Format> for String {
@@ -122,6 +123,7 @@ impl From<Format> for String {
     }
 }
 
+#[derive(Debug)]
 struct GroupedChunks {
     stream_header_chunks: Vec<StreamHeaderChunk>,
     stream_footer_chunks: Vec<StreamFooterChunk>,
@@ -149,7 +151,11 @@ impl XDFFile {
     # }
     ```
     */
+    #[instrument(level = "trace", skip(bytes))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
+        // log!(Level::Trace, "am I being trolled");
+        // log!(Level::Debug, "am I being trolled in debug?");
+
         // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes)
             .map_err(|e| match e {
@@ -184,6 +190,7 @@ impl XDFFile {
 }
 
 // takes a vector of chunks and sorts them into a GroupedChunks struct based on their type
+#[instrument(level = "trace")]
 fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), XDFError> {
     let mut file_header_chunk: Option<FileHeaderChunk> = None;
     let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
@@ -239,6 +246,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
 }
 
 // takes grouped chunks and combines them into finished streams.
+#[instrument(level = "trace")]
 fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
@@ -340,6 +348,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
 
 /// takes a bunch of iterators over a stream's samples and some offsets and
 /// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
+#[instrument(level = "trace")]
 fn process_samples(
     mut sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],

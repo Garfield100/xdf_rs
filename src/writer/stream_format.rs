@@ -28,7 +28,7 @@ define_stream_type!(f32, Format::Float32);
 define_stream_type!(f64, Format::Float64);
 define_stream_type!(&str, Format::String);
 
-pub trait NumberFormat: IntoBytes {}
+pub trait NumberFormat: StreamFormat + IntoBytes {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}
 impl NumberFormat for i32 {}

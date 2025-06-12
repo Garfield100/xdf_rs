@@ -162,20 +162,21 @@ fn read_minimal_xdf() {
 
     // check strings
     for (&expected, actual_sample) in expected_second_samples.iter().zip(second_stream.samples.iter()) {
-        match actual_sample.values {
-            Values::String(ref s) => {
-                // remove all whitespace
-                let mut actual_string = s.to_owned();
-                actual_string.retain(|c| !c.is_whitespace());
-                let mut expected = expected.to_string();
-                expected.retain(|c| !c.is_whitespace());
+        match actual_sample.values.clone() {
+            Values::Strings(strings) => {
+                // remove all whitespace because we're comparing XML and I'm too lazy to parse it.
+                let mut actual_string = strings;
+                actual_string[0].retain(|c| !c.is_whitespace()); // [0] only because we know minimal.xdf only has a single string value here
+
+                let mut expected = vec![expected.to_string()];
+                expected[0].retain(|c| !c.is_whitespace()); // [0] only because we know minimal.xdf only has a single string value here
 
                 dbg!(&actual_string);
                 dbg!(&expected);
 
                 assert_eq!(
                     actual_string, expected,
-                    "Unexpected value in second stream. Expected \n{expected}\n, got \n{actual_string}\n"
+                    "Unexpected value in second stream. Expected \n{expected:?}\n, got \n{actual_string:?}\n"
                 );
             }
             _ => panic!(

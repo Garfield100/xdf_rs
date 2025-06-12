@@ -4,11 +4,13 @@
 // [16]
 
 use nom::{bytes::complete::tag, error::context, IResult};
+use tracing::instrument;
 
 use crate::BoundaryChunk;
 
 use super::{chunk_content, chunk_tags::boundary_tag};
 
+#[instrument(level = "trace", skip(input), ret)]
 pub(crate) fn boundary(input: &[u8]) -> IResult<&[u8], BoundaryChunk> {
     let (input, chunk_content) = context("boundary chunk_content", chunk_content)(input)?;
 

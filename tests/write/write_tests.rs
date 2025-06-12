@@ -1,7 +1,7 @@
 use paste::paste;
-use std::vec;
+use std::{fs, vec};
+use test_log::test;
 use zerocopy::{Immutable, IntoBytes};
-// use test_log::test;
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
 use xdf::{
@@ -39,7 +39,7 @@ fn values_as_u64(val: &Values) -> Vec<u64> {
         Values::Int64(v) => v.iter().map(|n| *n as u64).collect(),
         Values::Float32(v) => v.iter().map(|n| n.to_bits() as u64).collect(),
         Values::Float64(v) => v.iter().map(|n| n.to_bits()).collect(),
-        Values::String(_) => {
+        Values::Strings(_) => {
             panic!("String values are not supported in this test");
         }
     }
@@ -89,38 +89,122 @@ fn write_simple_num<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> + I
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), 3);
+    assert_eq!(stream.samples.len(), samples.len());
 
-    for (i, sample) in samples.iter().enumerate() {
+    for (i, expected_sample) in samples.iter().enumerate() {
         assert_eq!(
             values_as_u64(&stream.samples[i].values),
-            sample.iter().map(|v| to_u64(*v)).collect::<Vec<_>>()
+            expected_sample.iter().map(|v| to_u64(*v)).collect::<Vec<_>>()
         );
         let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
         assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
     }
 }
 
-// #[test]
-// fn write_simple_str() {
-//     let mut buffer = Vec::new();
-//     let mut writer = XDFBuilder::new().build(&mut buffer).unwrap();
-//     let stream_info = StreamInfo::new(1, None);
-//     let mut stream = writer
-//         .add_stream::<&str, HasTimestamps>(stream_info)
-//         .name("Test Stream")
-//         .content_type("Test Content")
-//         .add_metadata_key("key1", "value1")
-//         .start_stream()
-//         .unwrap();
+// TODO deduplicate
 
-//     let samples: Vec<&[&str]> = vec![&["sample1"], &["sample2"], &["sample3"]];
-//     let timestamp = PositiveF64::new(1.0).unwrap();
+#[test]
+fn write_simple_str_two_ch() {
+    let mut buffer = Vec::new();
+    let mut writer = XDFBuilder::new().build(&mut buffer).unwrap();
+    let stream_info = StreamInfo::new(2, Some(NonZeroPositiveF64::new(100.0).unwrap()));
+    let mut stream = writer
+        .add_stream::<&str, HasTimestamps>(stream_info.clone())
+        .name("Test Stream")
+        .content_type("Test Content")
+        .add_metadata_key("key1", "value1")
+        .start_stream()
+        .unwrap();
 
-//     stream.write_samples(&samples, timestamp).unwrap();
+    let samples: Vec<[&str; 2]> = vec![["one", "two"], ["three", "four"], ["five", "🦀"]];
 
-//     drop(stream);
+    let timestamp = PositiveF64::new(1.0).unwrap();
 
-//     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-//     println!("Parsed XDFFile: {:#?}", parsed);
-// }
+    stream.write_samples(&samples, timestamp).unwrap();
+
+    drop(stream);
+
+    println!("buffer: {:?}", String::from_utf8_lossy(&buffer));
+    println!("buffer: {:?}", &buffer);
+
+    fs::write("str_test.xdf", &buffer).expect("Could not write file");
+
+    let parsed = XDFFile::from_bytes(&buffer).unwrap();
+    println!("Parsed XDFFile: {:#?}", parsed);
+
+    assert_eq!(parsed.version, 1.0);
+
+    // test stream properties
+    assert_eq!(parsed.streams.len(), 1);
+    let stream = &parsed.streams[0];
+    assert_eq!(stream.channel_count, 2);
+    assert_eq!(stream.name.as_deref(), Some("Test Stream"));
+    assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
+    assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
+    assert_eq!(stream.samples.len(), samples.len());
+
+    for (i, expected_sample) in samples.iter().enumerate() {
+        // assert_eq!(stream.samples[i].values, sample);
+        match &stream.samples[i].values {
+            Values::Strings(strings) => {
+                assert_eq!(strings.as_slice(), expected_sample)
+            }
+            _ => panic!("Wrong value type for string test"),
+        }
+        let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
+        assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
+    }
+}
+
+#[test]
+fn write_simple_str_one_ch() {
+    let mut buffer = Vec::new();
+    let mut writer = XDFBuilder::new().build(&mut buffer).unwrap();
+    let stream_info = StreamInfo::new(1, Some(NonZeroPositiveF64::new(100.0).unwrap()));
+    let mut stream = writer
+        .add_stream::<&str, HasTimestamps>(stream_info.clone())
+        .name("Test Stream")
+        .content_type("Test Content")
+        .add_metadata_key("key1", "value1")
+        .start_stream()
+        .unwrap();
+
+    let samples: Vec<[&str; 1]> = vec![["one"], ["two"], ["🦀"]];
+
+    let timestamp = PositiveF64::new(1.0).unwrap();
+
+    stream.write_samples(&samples, timestamp).unwrap();
+
+    drop(stream);
+
+    println!("buffer: {:?}", String::from_utf8_lossy(&buffer));
+    println!("buffer: {:?}", &buffer);
+
+    // fs::write("str_test.xdf", &buffer).expect("Could not write file");
+
+    let parsed = XDFFile::from_bytes(&buffer).unwrap();
+    println!("Parsed XDFFile: {:#?}", parsed);
+
+    assert_eq!(parsed.version, 1.0);
+
+    // test stream properties
+    assert_eq!(parsed.streams.len(), 1);
+    let stream = &parsed.streams[0];
+    assert_eq!(stream.channel_count, 1);
+    assert_eq!(stream.name.as_deref(), Some("Test Stream"));
+    assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
+    assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
+    assert_eq!(stream.samples.len(), samples.len());
+
+    for (i, expected_sample) in samples.iter().enumerate() {
+        // assert_eq!(stream.samples[i].values, sample);
+        match &stream.samples[i].values {
+            Values::Strings(strings) => {
+                assert_eq!(strings.as_slice(), expected_sample)
+            }
+            _ => panic!("Wrong value type for string test"),
+        }
+        let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
+        assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
+    }
+}

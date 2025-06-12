@@ -4,8 +4,10 @@ use nom::{
     number::complete::{le_u32, le_u64, le_u8},
     IResult, Parser,
 };
+use tracing::{instrument, trace};
 
 // num length bytes parser
+#[instrument(level = "trace", skip(input))]
 fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
     let parse_1 = value(1, tag([1_u8]));
     let parse_4 = value(4, tag([4_u8]));
@@ -14,9 +16,13 @@ fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
     nom::branch::alt((parse_1, parse_4, parse_8)).parse(input)
 }
 
+// TODO this should probably return u64 instead of usize or this would return an Error on 32 bit platforms and 8-byte lengths
 // length parser
+#[instrument(level = "trace", ret)]
 pub(crate) fn length(input: &[u8]) -> IResult<&[u8], usize> {
     let (input, num_length_bytes) = num_length_bytes(input)?;
+
+    trace!(%num_length_bytes);
 
     match num_length_bytes {
         1 => {

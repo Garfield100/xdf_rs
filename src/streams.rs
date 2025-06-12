@@ -1,4 +1,3 @@
-
 use crate::{Format, Sample};
 
 // minimal tags in version 1.0:

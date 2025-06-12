@@ -7,6 +7,7 @@ use nom::{
     number::complete::{le_f64, u8},
     IResult,
 };
+use tracing::{instrument, trace};
 
 use crate::{
     chunk_structs::{SamplesChunk, StreamHeaderChunkInfo},
@@ -15,8 +16,11 @@ use crate::{
 
 use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id, values};
 
+#[instrument(level = "trace", skip(input), ret)]
 fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
     let (input, timestamp_bytes) = u8(input)?;
+    trace!(%timestamp_bytes);
+
     match timestamp_bytes {
         0 => Ok((input, None)),
         8 => {
@@ -34,7 +38,7 @@ fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
 // [TimeStampBytes] [OptionalTimeStamp] [Value 1] [Value 2] ... [Value N]
 // [0 or 8] [Double, in seconds] [Value as defined by format] ...
 // [1][8 if TimeStampBytes==8, 0 if TimeStampBytes==0] [[Variable]] ...
-
+#[instrument(level = "trace", skip(input))]
 fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], Sample> {
     let (input, timestamp) = context("sample optional_timestamp", optional_timestamp)(input)?;
     let (input, values) = context("sample values", |i| values(i, format, num_channels))(input)?;
@@ -43,9 +47,9 @@ fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], S
 }
 
 #[allow(clippy::needless_pass_by_value)]
+#[instrument(level = "trace", skip(input))]
 pub(super) fn samples(
     input: &[u8],
-    // stream_info: &HashMap<u32, StreamHeaderChunkInfo>,
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
 ) -> IResult<&[u8], SamplesChunk> {
     let stream_info = stream_info.borrow();
