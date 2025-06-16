@@ -116,3 +116,46 @@ pub(crate) fn xml_add_child_overwrite<T: Into<String>>(elem: &mut Element, key: 
     let _old_child = elem.take_child(key);
     xml_add_child_unchecked(elem, key, value);
 }
+
+#[test]
+fn test_file_header() {
+    let mut buf: Vec<u8> = Vec::new();
+    let builder = XDFBuilder::new();
+    let _writer = builder.build(&mut buf).expect("Failed to build writer");
+
+    println!("{}", String::from_utf8_lossy(&buf));
+
+    // println!("{:?}", &buf);xdf_crate_version
+    // println!("{}", String::from_utf8_lossy(&buf));
+
+    assert!(buf.starts_with(b"XDF:"), "No magic number");
+    assert_eq!(&buf[4..6], [1, 127], "Incorrect length"); // technically due to the XML stuff this can change a bit and still be valid, depending on what the XML library outputs
+    assert_eq!(&buf[6..8], [1, 0], "Incorrect chunk tag");
+
+    let parsed_xml = Element::parse(&buf[8..]).expect("Header not valid XML");
+
+    assert_eq!(parsed_xml.name, "info");
+    assert!(
+        parsed_xml
+            .children
+            .iter()
+            .any(|c| c.as_element().unwrap().name == "version"),
+        "No version element"
+    );
+
+    assert_eq!(
+        parsed_xml
+            .children
+            .iter()
+            .find(|c| c.as_element().unwrap().name == "xdf_crate_version")
+            .expect("No xdf_crate_version element")
+            .as_element()
+            .unwrap()
+            .children[0]
+            .as_text()
+            .expect("Child should be text"),
+        env!("CARGO_PKG_VERSION")
+    );
+
+    // todo!()
+}

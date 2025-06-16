@@ -3,5 +3,6 @@ mod read {
 }
 
 mod write {
-    mod write_tests;
+    mod simple_num;
+    mod simple_str;
 }
