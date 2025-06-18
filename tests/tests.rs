@@ -1,4 +1,5 @@
 mod read {
+    mod example_files;
     mod read_tests;
 }
 
