@@ -9,3 +9,4 @@ dhat.out.*
 /mutants.out*
 /lcov.info
 Cargo.lock
+/*.xdf

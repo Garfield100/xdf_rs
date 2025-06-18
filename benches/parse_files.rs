@@ -1,10 +1,10 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::{fs, time::Duration};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::{fs, hint::black_box, time::Duration};
 
 // Files used in the tmp folder here can be downloaded from https://osf.io/uc7wn/ (thank you to Clemens Brunner for the upload)
 
 fn bench_parse_files(c: &mut Criterion) {
-    let minimal_bytes = fs::read("tests/minimal.xdf").unwrap();
+    let minimal_bytes = fs::read("tests/read/minimal.xdf").unwrap();
     c.bench_function("minimal.xdf - 4.0K", |b| {
         b.iter(|| {
             let xdf_data = xdf::XDFFile::from_bytes(black_box(&minimal_bytes)).unwrap();

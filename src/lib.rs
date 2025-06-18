@@ -64,7 +64,7 @@ use crate::chunk_structs::Chunk;
 mod parsers;
 use crate::parsers::xdf_file::xdf_file_parser;
 
-type StreamID = u32;
+pub(crate) type StreamID = u32;
 type SampleIter = std::vec::IntoIter<Sample>;
 
 /// XDF file struct  

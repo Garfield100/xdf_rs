@@ -23,9 +23,7 @@ use timestamp::TimestampTrait;
 pub use timestamp::{HasTimestamps, NoTimestamps};
 pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
 
-use crate::writer::write_helper::WriteHelper;
-
-pub(crate) type StreamID = u32;
+use crate::{writer::write_helper::WriteHelper, StreamID};
 
 pub(crate) trait Sealed {}
 
