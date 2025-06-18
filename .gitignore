@@ -5,7 +5,6 @@
 /flamegraph*.svg
 glassbench_v1.db
 dhat.out.*
-/Justfile
 /mutants.out*
 /lcov.info
 Cargo.lock

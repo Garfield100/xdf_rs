@@ -47,7 +47,7 @@ fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], S
 }
 
 #[allow(clippy::needless_pass_by_value)]
-#[instrument(level = "trace", skip(input))]
+#[instrument(level = "trace")]
 pub(super) fn samples(
     input: &[u8],
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
@@ -65,6 +65,14 @@ pub(super) fn samples(
     let format = stream_info.channel_format;
 
     let (_chunk_content, samples) = multi::count(|i| sample(i, num_channels, format), num_samples)(chunk_content)?;
+
+    #[cfg(test)]
+    if !_chunk_content.is_empty() {
+        panic!(
+            "Chunk was not read completely, there are {} bytes left.",
+            chunk_content.len()
+        )
+    }
 
     Ok((input, SamplesChunk { stream_id, samples }))
 }

@@ -175,6 +175,9 @@ impl XDFFile {
         // we don't error here to be more error tolerant and allow for partial parsing
         if !input.is_empty() {
             warn!("There are {} bytes left in the input after parsing.", input.len());
+
+            #[cfg(test)]
+            panic!("There are {} bytes left in the input after parsing.", input.len());
         }
 
         let (file_header_chunk, grouped_chunks) = group_chunks(chunks)?;
@@ -265,6 +268,9 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     for &stream_id in stream_header_map.keys() {
         if !stream_footer_map.contains_key(&stream_id) {
             warn!("Stream header without corresponding stream footer for id: {stream_id}");
+
+            #[cfg(test)]
+            panic!("Stream header without corresponding stream footer for id: {stream_id}");
         }
     }
 
@@ -272,6 +278,9 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     for &stream_id in stream_footer_map.keys() {
         if !stream_header_map.contains_key(&stream_id) {
             warn!("Stream footer without corresponding stream header for id: {stream_id}");
+
+            #[cfg(test)]
+            panic!("Stream footer without corresponding stream header for id: {stream_id}");
         }
     }
 
@@ -302,7 +311,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             stream_header.info.nominal_srate,
         );
 
-        let measured_srate = if stream_header.info.nominal_srate.is_some() {
+        let measured_srate = if let Some(nominal_srate) = stream_header.info.nominal_srate {
             // nominal_srate is given as "a floating point number in Hertz. If the stream
             // has an irregular sampling rate (that is, the samples are not spaced evenly in
             // time, for example in an event stream), this value must be 0."
@@ -311,13 +320,20 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             let first_timestamp: Option<f64> = samples_vec.first().and_then(|s| s.timestamp);
             let last_timestamp: Option<f64> = samples_vec.last().and_then(|s| s.timestamp);
 
-            if let (num_samples, Some(first_timestamp), Some(last_timestamp)) =
-                (samples_vec.len(), first_timestamp, last_timestamp)
-            {
-                if num_samples == 0 {
+            if let (Some(first_timestamp), Some(last_timestamp)) = (first_timestamp, last_timestamp) {
+                let delta = last_timestamp - first_timestamp;
+                if delta <= 0.0 || !delta.is_finite() {
                     None // don't divide by zero :)
                 } else {
-                    Some((last_timestamp - first_timestamp) / num_samples as f64)
+                    let measured_srate = (samples_vec.len() - 1) as f64 / delta; // samples_vec.len() - 1 because we want the number of "gaps" between samples
+
+                    let ratio = measured_srate / nominal_srate;
+
+                    if (ratio - 1.0).abs() > 0.1 {
+                        warn!("Measured srate deviates more than 10% from the nominal srate: expected nominal of {nominal_srate} Hz but measured {measured_srate} Hz.")
+                    }
+
+                    Some(measured_srate)
                 }
             } else {
                 None
