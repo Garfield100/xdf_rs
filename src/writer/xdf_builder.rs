@@ -2,8 +2,13 @@ use std::io::Write;
 
 use xmltree::{Element, XMLNode};
 
+use crate::writer::Sealed;
+
 use super::{error::XDFWriterError, WriteHelper, XDFWriter};
 
+/// Top level writer struct. Created using its [`new`](XDFBuilder::new) method.
+///
+/// Metadata can be added to the file header's XML using the functions provided by the [`HasMetadataAndDesc`] trait.
 pub struct XDFBuilder {
     file_header: Element,
 
@@ -17,13 +22,15 @@ impl Default for XDFBuilder {
     }
 }
 
-// pub struct XDFMeta {
-//     pub description: String,
-//     pub author: String,
-//     pub date: String,
-// }
-
 impl XDFBuilder {
+    /// Creates a new XDFBuilder.
+    ///
+    /// # Examples
+    /// ```
+    /// use xdf::writer::XDFBuilder;
+    ///
+    /// let xdf_builder = XDFBuilder::new();
+    /// ```
     pub fn new() -> Self {
         let file_header = Element::new("info");
         let desc = Element::new("desc");
@@ -31,6 +38,22 @@ impl XDFBuilder {
         XDFBuilder { file_header, desc }
     }
 
+    /// Finalises the XDFBuilder by writing the header chunk to the provided writer and returning an [`XDFWriter`] struct.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use xdf::writer::XDFBuilder;
+    ///
+    /// // Create a new file called "foo.xdf".
+    /// let mut file = File::create("foo.xdf").expect("Could not create new XDF file");
+    /// // Create an XDFWriter by passing a mutable reference to the file
+    /// let xdf_writer = XDFBuilder::new().build(&mut file);
+    ///
+    /// // The destination doesn't have to be a file! Anything which implements std::io::Write will work! Here is an example with a byte vector:
+    /// let mut file_bytes: Vec<u8> = Vec::new();
+    /// let xdf_writer_vec = XDFBuilder::new().build(&mut file_bytes);
+    /// ```
     pub fn build<W: Write>(mut self, writer: W) -> Result<XDFWriter<W>, XDFWriterError> {
         // overwrite `version` and `xdf_crate_version` in case they were set before
         self.ensure_fields();
@@ -58,7 +81,52 @@ impl XDFBuilder {
     }
 }
 
-pub trait HasMetadataAndDesc: Sized {
+/// Provides functions to modify XML to be embedded.
+///
+/// See [SCCN's metadata conventions](https://github.com/sccn/xdf/wiki/Meta-Data).
+#[allow(private_bounds)]
+pub trait HasMetadataAndDesc: Sized + Sealed {
+    /// Adds a key-value pair to the top level XML metadata.
+    ///
+    /// See [SCCN's metadata conventions](https://github.com/sccn/xdf/wiki/Meta-Data).
+    ///
+    /// Note that certain elements (such as, for example, `<version>`) will be overwritten once the builder is finalised.
+    /// See the respective struct's docs for specifics.
+    /// Store things in the `<desc>` element using the appropriate methods to avoid this.
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use xdf::writer::{XDFBuilder, HasMetadataAndDesc};
+    ///
+    /// let mut file = File::create("foo.xdf").expect("Could not create new XDF file");
+    ///
+    /// let xdf_writer = XDFBuilder::new().add_metadata_key("name", "Garfield").build(&mut file);
+    /// ```
+    fn add_metadata_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
+        xml_add_child_overwrite(self.get_metadata_mut(), key, value);
+        self
+    }
+
+    /// Adds a key-value pair to the `<desc>` XML tag.
+    ///
+    /// See [SCCN's metadata conventions](https://github.com/sccn/xdf/wiki/Meta-Data).
+    ///
+    /// No fields in the `<desc>` tag will be overwritten by the builder.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::fs::File;
+    /// use xdf::writer::{XDFBuilder, HasMetadataAndDesc};
+    ///
+    /// let mut file = File::create("foo.xdf").expect("Could not create new XDF file");
+    ///
+    /// let xdf_writer = XDFBuilder::new().add_desc_key("name", "Garfield").build(&mut file);
+    /// ```
+    fn add_desc_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
+        xml_add_child_overwrite(self.get_desc_mut(), key, value);
+        self
+    }
+
     /// Returns a mutable reference to an XML Element which forms the Header's metadata.
     /// See other methods for more convenient ways of modifying this.
     /// This direct access is only really necessary if you e.g. wish to add nested elements etc.
@@ -71,26 +139,9 @@ pub trait HasMetadataAndDesc: Sized {
     /// See other methods for more convenient ways of modifying this.
     /// No fields in the `<desc>` tag will be overwritten by the builder.
     fn get_desc_mut(&mut self) -> &mut Element;
-
-    /// Adds a key-value pair to the top level XML metadata.
-    /// Note that certain elements (such as, for example, `<version>`) will be overwritten once the builder is finalised.
-    /// See the respective struct's docs for specifics.
-    /// Store things in the `<desc>` element using the appropriate methods to avoid this.
-    // TODO example
-    fn add_metadata_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
-        xml_add_child_overwrite(self.get_metadata_mut(), key, value);
-        self
-    }
-
-    /// Adds a key-value pair to the <desc> XML tag.
-    /// No fields in the <desc> tag will be overwritten by the builder.
-    // TODO example
-    fn add_desc_key<S: Into<String>>(mut self, key: &str, value: S) -> Self {
-        xml_add_child_overwrite(self.get_desc_mut(), key, value);
-        self
-    }
 }
 
+impl Sealed for XDFBuilder {}
 impl HasMetadataAndDesc for XDFBuilder {
     fn get_metadata_mut(&mut self) -> &mut Element {
         &mut self.file_header
@@ -125,9 +176,6 @@ fn test_file_header() {
 
     println!("{}", String::from_utf8_lossy(&buf));
 
-    // println!("{:?}", &buf);xdf_crate_version
-    // println!("{}", String::from_utf8_lossy(&buf));
-
     assert!(buf.starts_with(b"XDF:"), "No magic number");
     assert_eq!(&buf[4..6], [1, 127], "Incorrect length"); // technically due to the XML stuff this can change a bit and still be valid, depending on what the XML library outputs
     assert_eq!(&buf[6..8], [1, 0], "Incorrect chunk tag");
@@ -156,6 +204,4 @@ fn test_file_header() {
             .expect("Child should be text"),
         env!("CARGO_PKG_VERSION")
     );
-
-    // todo!()
 }

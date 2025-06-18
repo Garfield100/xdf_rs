@@ -1,13 +1,12 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::fmt::Debug;
 
-use xmltree::Element;
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::Format;
+use crate::{writer::Sealed, Format};
 
-use super::{xdf_builder::xml_add_child_unchecked, StreamID, StreamInfo, XDFWriterError};
 macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {
+        impl Sealed for $name {}
         impl StreamFormat for $name {
             fn get_format() -> Format {
                 $format
@@ -16,7 +15,12 @@ macro_rules! define_stream_type {
     };
 }
 
-pub trait StreamFormat: Sized + Debug + Immutable {
+/// Trait implemented for valid stream formats.
+///
+/// Mostly a marker trait. Sealed as it is not meant to be implemented for other types.
+#[allow(private_bounds)]
+pub trait StreamFormat: Sized + Debug + Immutable + Sealed {
+    /// Returns the [`Format`] associated with this type
     fn get_format() -> Format;
 }
 
@@ -28,55 +32,14 @@ define_stream_type!(f32, Format::Float32);
 define_stream_type!(f64, Format::Float64);
 define_stream_type!(&str, Format::String);
 
-pub trait NumberFormat: StreamFormat + IntoBytes {}
+/// Marker trait for stream formats which are not string.
+///
+/// Sealed as it is not meant to be implemented for other types.
+#[allow(private_bounds)]
+pub trait NumberFormat: StreamFormat + IntoBytes + Sealed {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}
 impl NumberFormat for i32 {}
 impl NumberFormat for i64 {}
 impl NumberFormat for f32 {}
 impl NumberFormat for f64 {}
-
-#[derive(Debug, Clone)]
-pub struct StreamHandle<T: StreamFormat> {
-    _format_marker: PhantomData<T>,
-    // _writer_lifetime_marker: PhantomData<&'writer ()>,
-    pub(crate) stream_info: StreamInfo,
-    pub(crate) stream_id: StreamID,
-}
-
-impl<T: StreamFormat> StreamHandle<T> {
-    // to be called by XDFWriter
-    pub(crate) fn new(stream_id: StreamID, stream_info: StreamInfo) -> Self {
-        Self {
-            stream_id,
-            stream_info,
-            _format_marker: PhantomData,
-            // _writer_lifetime_marker: PhantomData,
-        }
-    }
-
-    pub(crate) fn chunk_bytes(&self) -> Result<Vec<u8>, XDFWriterError> {
-        let id_bytes = self.stream_id.to_le_bytes();
-        debug_assert!(id_bytes.len() == 4, "Stream ID should be 4 bytes");
-
-        let mut bytes = id_bytes.to_vec();
-
-        stream_xml_header::<T>(&self.stream_info).write(&mut bytes)?;
-
-        Ok(bytes)
-    }
-}
-
-fn stream_xml_header<T: StreamFormat>(stream_info: &StreamInfo) -> Element {
-    let mut header = Element::new("info");
-    xml_add_child_unchecked(&mut header, "channel_count", stream_info.channel_count.to_string());
-
-    match stream_info.nominal_srate {
-        Some(srate) => xml_add_child_unchecked(&mut header, "nominal_srate", srate.to_string()),
-        None => xml_add_child_unchecked(&mut header, "nominal_srate", "0"),
-    }
-
-    xml_add_child_unchecked(&mut header, "format", String::from(T::get_format()));
-
-    header
-}

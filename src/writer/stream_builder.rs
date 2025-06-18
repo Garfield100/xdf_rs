@@ -1,6 +1,6 @@
 use xmltree::{Element, XMLNode};
 
-use crate::writer::SharedState;
+use crate::writer::{Sealed, SharedState};
 use std::{
     io::Write,
     sync::{Arc, Mutex},
@@ -91,6 +91,7 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamBuilder<W, F, T> {
     }
 }
 
+impl<W: Write, F: StreamFormat, T: TimestampTrait> Sealed for StreamBuilder<W, F, T> {}
 impl<W: Write, F: StreamFormat, T: TimestampTrait> HasMetadataAndDesc for StreamBuilder<W, F, T> {
     fn get_metadata_mut(&mut self) -> &mut Element {
         &mut self.metadata

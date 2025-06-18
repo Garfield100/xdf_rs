@@ -48,6 +48,9 @@ pub use sample::Sample;
 mod streams;
 mod util;
 
+// TODO split reader into its own module too?
+/// Contains types and functions used to write XDF files.
+#[cfg(feature = "write")]
 pub mod writer;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
@@ -153,9 +156,6 @@ impl XDFFile {
     */
     #[instrument(level = "trace", skip(bytes))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
-        // log!(Level::Trace, "am I being trolled");
-        // log!(Level::Debug, "am I being trolled in debug?");
-
         // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes)
             .map_err(|e| match e {
@@ -245,7 +245,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
     Ok((file_header_chunk, info))
 }
 
-// takes grouped chunks and combines them into finished streams.
+/// takes grouped chunks and combines them into finished streams.
 #[instrument(level = "trace")]
 fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks

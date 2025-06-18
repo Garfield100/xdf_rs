@@ -1,25 +1,14 @@
+use crate::writer::Sealed;
+
+/// Marker type used to specify that a stream should have timestamps using the generic parameters.
 pub struct HasTimestamps;
+/// Marker type used to specify that a stream should not have timestamps using the generic parameters.
 pub struct NoTimestamps;
 
-pub enum TimestampEnum {
-    HasTimestamps,
-    NoTimestamps,
-}
+#[allow(private_bounds)] // the point is to make this trait visible but not implementable
+pub trait TimestampTrait: Sealed {}
 
-pub trait TimestampTrait {
-    fn get_enum() -> TimestampEnum;
-    fn is_timestamped() -> bool {
-        matches!(Self::get_enum(), TimestampEnum::HasTimestamps)
-    }
-}
-
-impl TimestampTrait for HasTimestamps {
-    fn get_enum() -> TimestampEnum {
-        TimestampEnum::HasTimestamps
-    }
-}
-impl TimestampTrait for NoTimestamps {
-    fn get_enum() -> TimestampEnum {
-        TimestampEnum::NoTimestamps
-    }
-}
+impl Sealed for HasTimestamps {}
+impl Sealed for NoTimestamps {}
+impl TimestampTrait for HasTimestamps {}
+impl TimestampTrait for NoTimestamps {}

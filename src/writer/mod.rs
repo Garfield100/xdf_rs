@@ -8,6 +8,8 @@ use stream_format::StreamFormat;
 
 mod error;
 mod stream_builder;
+
+/// Contains valid stream format types and traits.
 pub mod stream_format;
 mod stream_writer;
 mod timestamp;
@@ -24,6 +26,8 @@ pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
 use crate::writer::write_helper::WriteHelper;
 
 pub(crate) type StreamID = u32;
+
+pub(crate) trait Sealed {}
 
 const _: () = const {
     assert!(size_of::<StreamID>() == 4, "StreamID should be 4 bytes long");
@@ -63,21 +67,31 @@ pub(crate) struct SharedState<W: Write> {
     write_helper: WriteHelper<W>,
 }
 
+/// Used to add new streams to the file.
+///
+/// XDFWriters are returned by finalising an XDFBuilder using its [`build`](XDFBuilder::build) method.
+/// Their main function is to add new streams to the XDF File being written using the [`add_stream`](XDFWriter::add_stream) method.
+///
+/// See
+/// TODO add link to XDFBuilder doc example
 #[must_use]
 pub struct XDFWriter<W: Write> {
     state: Arc<Mutex<SharedState<W>>>,
     num_streams: u32,
 }
 
+/// Basic stream information used when constructing a new stream.
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
+    /// This stream's channel count. All samples pushed to this stream must have this size.
     pub channel_count: usize,
+
+    /// The ideal rate of this stream's samples in Hertz, if present.
     pub nominal_srate: Option<NonZeroPositiveF64>,
-    // name: String,
-    // content_type: String,
 }
 
 impl StreamInfo {
+    /// Creates a new [`StreamInfo`] struct.
     #[allow(clippy::must_use_candidate)] // false positive
     pub fn new(channel_count: usize, nominal_srate: Option<NonZeroPositiveF64>) -> Self {
         Self {
@@ -88,7 +102,7 @@ impl StreamInfo {
 }
 
 impl<W: Write> XDFWriter<W> {
-    // only to be called by the XDFBuilder
+    /// Only to be called by the XDFBuilder
     pub(crate) fn new(write_helper: WriteHelper<W>) -> Self {
         // the specification suggests ordinal numbers starting at 1
         Self {
@@ -97,6 +111,20 @@ impl<W: Write> XDFWriter<W> {
         }
     }
 
+    /// The way to introduce new streams to a file. Returns a new [`StreamBuilder`].
+    ///
+    /// In addition to a [`StreamInfo`] struct, this function takes two generic parameters:
+    /// a type implementing [`StreamFormat`], and either [`HasTimestamps`] or [`NoTimestamps`].
+    /// The first specifies which format the stream should have, i.e. the type of its values, for example i8 or f32.
+    /// The second specifies whether or not this stream's samples should contain timestamps or not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    ///
+    /// ```
+    // TODO finish example
     pub fn add_stream<F: StreamFormat, T: TimestampTrait>(
         &mut self,
         stream_info: StreamInfo,
@@ -108,6 +136,11 @@ impl<W: Write> XDFWriter<W> {
         StreamBuilder::new(stream_id, stream_info, self.state.clone())
     }
 
+    /// Writes a boundary chunk to the file.
+    ///
+    /// Boundary chunks contain a 16 long string of bytes which can be used to recover some intact chunks if part of a file has been corrupted.
+    /// The XDF Specification recommends writing one of these boundary chunks around every 10 seconds.
+    /// For convenience, this same function can also be called from [`StreamWriter`]s.
     pub fn write_boundary(&mut self) -> Result<(), XDFWriterError> {
         let mut state_lock = self.state.lock()?;
         let write_helper = &mut state_lock.write_helper;
