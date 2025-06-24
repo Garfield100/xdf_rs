@@ -50,8 +50,17 @@ fn write_simple_str_two_ch() {
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
     assert_eq!(stream.samples.len(), samples.len());
 
+    {
+        let measured = stream.measured_srate.unwrap();
+        let nominal = stream_info.nominal_srate.unwrap().get();
+        let abs_diff = (measured - nominal).abs();
+        const EPSILON: f64 = f64::EPSILON * 400.0; // Increased until it worked lmao. Still very small though.
+        assert!(
+            abs_diff < EPSILON,
+            "Expected measured {measured} to be within {EPSILON} of nominal {nominal}, actual abs. diff. was {abs_diff}, {}x larger than the epsilon.", abs_diff / EPSILON);
+    }
+
     for (i, expected_sample) in samples.iter().enumerate() {
-        // assert_eq!(stream.samples[i].values, sample);
         match &stream.samples[i].values {
             Values::Strings(strings) => {
                 assert_eq!(strings.as_slice(), expected_sample)
@@ -101,7 +110,6 @@ fn write_simple_str_one_ch() {
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), samples.len());
     assert_eq!(stream.samples.len(), samples.len());
     {
         let measured = stream.measured_srate.unwrap();

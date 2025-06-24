@@ -113,11 +113,48 @@ fn write_simple_num_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> 
             expected_sample.iter().map(|v| to_u64(*v)).collect::<Vec<_>>()
         );
         let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
+        dbg!(expected_timestamp);
         assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
     }
 
     // TODO test footer info
-    let footer = &parsed.streams[0].footer;
+    let footer = parsed.streams[0].footer.as_ref().expect("Should have footer");
+
+    // currently we add:
+    // first_timestamp
+    // last_timestamp
+    // num_samples_written
+
+    assert!(
+        footer
+            .children
+            .iter()
+            .map(|c| c.as_element().unwrap())
+            .any(|e| e.name == "first_timestamp"
+                && e.children[0].as_text().unwrap().parse::<f64>().unwrap() == timestamp.get()),
+        "first_timestmap not found or incorrect"
+    );
+
+    assert!(
+        footer
+            .children
+            .iter()
+            .map(|c| c.as_element().unwrap())
+            .any(|e| e.name == "last_timestamp"
+                && dbg!(e).children[0].as_text().unwrap().parse::<f64>().unwrap()
+                    == dbg!(timestamp.get() + (samples.len() - 1) as f64 / stream_info.nominal_srate.unwrap().get())),
+        "last_timestamp not found or incorrect"
+    );
+
+    assert!(
+        footer
+            .children
+            .iter()
+            .map(|c| c.as_element().unwrap())
+            .any(|e| e.name == "num_samples_written"
+                && e.children[0].as_text().unwrap().parse::<usize>().unwrap() == samples.len()),
+        "num_samples_written not found or incorrect"
+    );
 }
 
 // TODO deduplicate tests

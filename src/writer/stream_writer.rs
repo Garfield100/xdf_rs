@@ -185,7 +185,7 @@ where
         if let Some(srate) = self.info.nominal_srate {
             // TODO period could be calculated once on Stream creation and stored
             let period = 1.0 / srate.get(); // result is still non-zero (barring subnormals) and positive
-            let time_delta = first_timestamp.get() + samples.len() as f64 * period; // same for this
+            let time_delta = (self.num_samples_written - 1) as f64 * period; // same for this
             let last_timestamp = first_timestamp.get() + time_delta; // and this
 
             // this should therefore be safe to unwrap
@@ -360,11 +360,13 @@ where
             }
         }
 
+        self.num_samples_written += samples.len();
+
         // update the last timestamp
         // if we have an srate, we can calculate the timestamp of the last sample given to us
         if let Some(srate) = self.info.nominal_srate {
             let period = 1.0 / srate.get(); // result is still non-zero (barring subnormals) and positive
-            let time_delta = first_timestamp.get() + samples.len() as f64 * period; // same for this
+            let time_delta = (self.num_samples_written - 1) as f64 * period; // same for this
             let last_timestamp = first_timestamp.get() + time_delta; // and this
 
             // this should therefore be safe to unwrap
@@ -375,8 +377,6 @@ where
             // if there is no srate, the best we can do is use the only timestamp given
             self.last_timestamp.replace(first_timestamp);
         }
-
-        self.num_samples_written += samples.len();
 
         Ok(())
     }
