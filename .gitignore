@@ -9,3 +9,4 @@ dhat.out.*
 /lcov.info
 Cargo.lock
 /*.xdf
+*.html

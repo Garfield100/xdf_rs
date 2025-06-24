@@ -2,7 +2,7 @@ test:
     cargo test
 
 mutate:
-    @cargo mutants --jobs 2 --timeout 2
+    @cargo mutants --jobs 10 --timeout 2
 
 bench:
     cargo bench
@@ -14,3 +14,6 @@ fix:
     cargo fmt
     cargo fix --allow-dirty
     cargo clippy --fix --allow-dirty
+
+coverage:
+    cargo tarpaulin --out html
