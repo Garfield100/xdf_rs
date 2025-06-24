@@ -15,7 +15,7 @@ categories = ["parser-implementations", "science::neuroscience"]
 
 [dependencies]
 nom = { version = "7.1.3", optional = true }
-strict-num = { version = "0.2.0", default-features = false, optional = true }
+strict-num = { version = "0.2.0", default-features = false }
 thiserror = "2.0.12"
 tracing = "0.1.41"
 xmltree = "0.11.0"
@@ -43,4 +43,4 @@ harness = false
 [features]
 default = ["read", "write"]
 read = ["dep:nom"]
-write = ["dep:strict-num", "dep:zerocopy"]
+write = ["dep:zerocopy"]

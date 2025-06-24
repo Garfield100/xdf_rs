@@ -56,8 +56,8 @@ pub mod writer;
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
 use streams::Stream;
+use strict_num::FiniteF64;
 use tracing::{instrument, warn};
-use util::FiniteF64;
 
 use crate::chunk_structs::Chunk;
 
@@ -391,7 +391,7 @@ fn process_samples(
             .peek()
             .and_then(|s| s.timestamp)
             .and_then(FiniteF64::new)
-            .unwrap_or(FiniteF64::zero());
+            .unwrap_or(FiniteF64::new(1.0).expect("Unreachable"));
         sample_iterators_merged.push((first_ts, vec![first]));
 
         for it in rest {
