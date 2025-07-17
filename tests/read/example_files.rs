@@ -33,7 +33,7 @@ fn ensure_no_panic() {
                 if xdf_file.is_ok() {
                     "Ok".to_string()
                 } else {
-                    format!("{:?}", xdf_file)
+                    format!("{xdf_file:?}")
                 }
             )
         }
