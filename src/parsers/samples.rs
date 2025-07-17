@@ -64,7 +64,8 @@ pub(super) fn samples(
     let num_channels = stream_info.channel_count as usize;
     let format = stream_info.channel_format;
 
-    let (_chunk_content, samples) = multi::count(|i| sample(i, num_channels, format), num_samples)(chunk_content)?;
+    let (_chunk_content, samples) =
+        multi::count(|i| sample(i, num_channels, format), num_samples as usize)(chunk_content)?;
 
     #[cfg(test)]
     if !_chunk_content.is_empty() {

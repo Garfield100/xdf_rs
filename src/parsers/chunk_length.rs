@@ -16,10 +16,9 @@ fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
     nom::branch::alt((parse_1, parse_4, parse_8)).parse(input)
 }
 
-// TODO this should probably return u64 instead of usize or this would return an Error on 32 bit platforms and 8-byte lengths
 // length parser
 #[instrument(level = "trace", ret)]
-pub(crate) fn length(input: &[u8]) -> IResult<&[u8], usize> {
+pub(crate) fn length(input: &[u8]) -> IResult<&[u8], u64> {
     let (input, num_length_bytes) = num_length_bytes(input)?;
 
     trace!(%num_length_bytes);
@@ -27,20 +26,14 @@ pub(crate) fn length(input: &[u8]) -> IResult<&[u8], usize> {
     match num_length_bytes {
         1 => {
             let (input, length) = le_u8(input)?;
-            Ok((input, length as usize))
+            Ok((input, length as u64))
         }
         4 => {
             let (input, length) = le_u32(input)?;
-            Ok((input, length as usize))
+            Ok((input, length as u64))
         }
         8 => {
             let (input, length) = le_u64(input)?;
-            let length = usize::try_from(length).map_err(|_| {
-                nom::Err::Failure(nom::error::Error::new(
-                    input,
-                    nom::error::ErrorKind::LengthValue, // not how these errors should be used but nom is a bit of a pain here
-                ))
-            })?;
             Ok((input, length))
         }
         _ => Err(nom::Err::Failure(nom::error::Error::new(
@@ -86,7 +79,7 @@ fn test_length() {
         let (remainder, len) = result.unwrap();
         assert!(remainder.is_empty());
         assert_eq!(
-            value, len as u64,
+            value, len,
             "num_bytes: {num_bytes}\nExpected: \t0x{value:X}\nGot:\t\t0x{len:X}"
         );
     }
