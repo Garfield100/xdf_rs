@@ -55,7 +55,7 @@ pub mod writer;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
-use streams::Stream;
+pub use streams::Stream;
 use strict_num::FiniteF64;
 use tracing::{instrument, warn};
 
@@ -73,6 +73,8 @@ type SampleIter = std::vec::IntoIter<Sample>;
 pub struct XDFFile {
     /// XDF version. Currently only 1.0 exists according to the specification.
     pub version: f32,
+    // TODO add convenience functions for XML reading
+    // TODO switch to quick_xml?
     /// The XML header of the XDF file as an [`xmltree::Element`].
     pub header: xmltree::Element,
 
@@ -80,24 +82,9 @@ pub struct XDFFile {
     pub streams: Vec<Stream>,
 }
 
-/// Possible formats for the data in a stream as given in the specification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Format {
-    /// signed 8-bit integer
-    Int8,
-    /// signed 16-bit integer
-    Int16,
-    /// signed 32-bit integer
-    Int32,
-    /// signed 64-bit integer
-    Int64,
-    /// 32-bit floating point number
-    Float32,
-    /// 64-bit floating point number
-    Float64,
-    /// UTF-8 encoded string, for example for event markers.
-    String,
-}
+pub mod format;
+pub use format::Format;
+
 
 /// The values of a sample in a stream. The values are stored as a vector of the corresponding type (or a string).
 #[allow(missing_docs)]
@@ -112,19 +99,6 @@ pub enum Values {
     Strings(Vec<String>),
 }
 
-impl From<Format> for String {
-    fn from(format: Format) -> Self {
-        match format {
-            Format::Int8 => "int8".to_string(),
-            Format::Int16 => "int16".to_string(),
-            Format::Int32 => "int32".to_string(),
-            Format::Int64 => "int64".to_string(),
-            Format::Float32 => "float32".to_string(),
-            Format::Float64 => "double64".to_string(),
-            Format::String => "string".to_string(),
-        }
-    }
-}
 
 #[derive(Debug)]
 struct GroupedChunks {
