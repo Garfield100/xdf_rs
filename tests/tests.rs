@@ -1,6 +1,7 @@
 mod read {
     mod example_files;
-    mod read_tests;
+    mod read_files;
+    mod read_integration;
 }
 
 mod write {
