@@ -85,7 +85,8 @@ pub struct XDFFile {
 pub mod format;
 pub use format::Format;
 
-
+// TODO why the fuck did I do it this way, now one has to match on every single sample even if one of the few things
+// this format guarantees is that all the samples in a stream are of the same type?
 /// The values of a sample in a stream. The values are stored as a vector of the corresponding type (or a string).
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
@@ -98,7 +99,6 @@ pub enum Values {
     Float64(Vec<f64>),
     Strings(Vec<String>),
 }
-
 
 #[derive(Debug)]
 struct GroupedChunks {
@@ -395,15 +395,6 @@ fn process_samples(
         .map(Iterator::peekable)
         .filter_map(|mut it| if it.peek().is_none() { None } else { Some(it) });
 
-    // let samples_in_order: bool = sample_iterators
-    //     .clone()
-    //     .filter_map(|mut it| it.peek().map(|s| s.timestamp))
-    //     .is_sorted();
-
-    // if !samples_in_order {
-    //     return Err(XDFError::InvalidSample);
-    // }
-
     sample_iterators
         .into_iter()
         .flatten()
@@ -454,11 +445,7 @@ fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], off
 
         // indexing to zero is safe because we know the vector is not empty
         if ts < stream_offsets[0].collection_time {
-            // debug_assert_eq!(
-            //     *offset_index, 0,
-            //     "Timestamp is older than the first clock offset, but the offset index is not zero."
-            // );
-            // I initially thought this would be an invalid state, however this can happen if the chunks are not in order of collection time.
+            // In this case, we have a timestamp that comes before any clock offset chunk.
             // This isn't great but not fatal either. We check clock offsets for being in order, so it can't be those.
             // As a best effort we add the first stream offset, as that is the closest one.
             return ts + stream_offsets[0].offset_value;

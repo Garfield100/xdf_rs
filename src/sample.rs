@@ -13,6 +13,7 @@ pub struct Sample {
 
     Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
     */
+    // TODO positive finite timestamp? technically I don't care except for interpolation
     pub timestamp: Option<f64>,
 
     /// The values of the sample.

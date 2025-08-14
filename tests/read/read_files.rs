@@ -11,7 +11,6 @@ fn read_minimal_xdf() {
     let bytes = fs::read(file_path).unwrap();
     let xdf_file = XDFFile::from_bytes(&bytes).unwrap();
 
-    //must be sorted
     let stream_ids: [u32; 2] = [0, 0x02C0_FFEE];
 
     assert_eq!(xdf_file.header.name, "info");
