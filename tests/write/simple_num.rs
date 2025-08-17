@@ -7,12 +7,10 @@ use zerocopy::{Immutable, IntoBytes};
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
 use xdf::{
-    writer::{
-        stream_format::{NumberFormat, StreamFormat},
-        HasMetadataAndDesc, HasTimestamps, NoTimestamps, StreamInfo, XDFBuilder,
-    },
+    writer::{HasMetadataAndDesc, HasTimestamps, NoTimestamps, StreamInfo, XDFBuilder},
     Values, XDFFile,
 };
+use xdf::{NumberFormat, StreamFormat};
 
 macro_rules! simple_num_tests {
     ($t: ty) => {

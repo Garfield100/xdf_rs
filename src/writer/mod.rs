@@ -4,13 +4,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::stream_format;
 use stream_format::StreamFormat;
 
 mod error;
 mod stream_builder;
 
 /// Contains valid stream format types and traits.
-pub mod stream_format;
 mod stream_writer;
 mod timestamp;
 pub(crate) mod write_helper;

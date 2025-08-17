@@ -42,6 +42,10 @@ mod chunk_structs;
 mod errors;
 
 mod sample;
+mod stream_format;
+pub use stream_format::NumberFormat;
+pub use stream_format::StreamFormat;
+
 pub use sample::Sample;
 
 // TODO rethink visibility/re-export of structs like Stream
@@ -57,6 +61,7 @@ use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFoot
 use errors::{ParseError, StreamError, XDFError};
 pub use streams::Stream;
 use strict_num::FiniteF64;
+use strict_num::NonZeroPositiveF64;
 use tracing::{instrument, warn};
 
 use crate::chunk_structs::Chunk;
