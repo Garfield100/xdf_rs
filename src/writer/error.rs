@@ -17,7 +17,6 @@ pub enum XDFWriterError {
     LengthMismatch { expected: usize, actual: usize },
 }
 
-// TODO restrict this impl somewhat? Or not
 impl<T> From<PoisonError<T>> for XDFWriterError {
     fn from(_value: PoisonError<T>) -> Self {
         XDFWriterError::PoisonError

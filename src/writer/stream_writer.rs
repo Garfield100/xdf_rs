@@ -189,6 +189,7 @@ where
             let last_timestamp = first_timestamp.get() + time_delta; // and this
 
             // this should therefore be safe to unwrap
+            // TODO this function already returns results, this could also be one instead of an unwrap (even if it should be safe)
             let last_timestamp = PositiveF64::new(last_timestamp).expect("last timestamp must be positive and finite");
 
             self.last_timestamp.replace(last_timestamp);
@@ -337,7 +338,6 @@ where
         let mut first = true;
         for sample in samples {
             if first {
-                // TODO just write directly instead of combining and then writing?
                 let mut bytes = [0_u8; 9];
                 bytes[0] = 8; // indicate 8 bytes for the timestamp
                 let first_timestamp_bytes = first_timestamp.get().to_le_bytes();

@@ -11,11 +11,12 @@ use crate::{Format, Sample};
 // desc
 
 // TODO Maybe make the stream's format a generic type argument, and then same for the samples they contain and the values within.
+// TODO add derives
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stream {
-    pub id: u32, // not really necessary but nie for debugging and testing
+    pub id: u32, // not really necessary but nice for debugging and testing
     pub channel_count: u32,
-    // TODO Use NonZeroF64 here
+    // TODO Use NonZeroPositiveF64 here
     pub nominal_srate: Option<f64>, //a mandatory field but we replace zero with None
     pub format: Format,
 
@@ -26,7 +27,7 @@ pub struct Stream {
     pub header: xmltree::Element, //contains desc
     pub footer: Option<xmltree::Element>,
 
-    // TODO Use NonZeroF64 here
+    // TODO Use NonZeroPositiveF64 here
     pub measured_srate: Option<f64>,
 
     pub samples: Vec<Sample>,

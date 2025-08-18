@@ -13,7 +13,8 @@ pub struct Sample {
 
     Internally, streams are recorded in "chunks". The first sample in a chunk generally includes a timestamp while the rest are calculated.
     */
-    // TODO positive finite timestamp? technically I don't care except for interpolation
+    // positive finite timestamp? With the interpolation I don't think I can guarantee finity
+    // without passing Results up from every tiny interpolation and tanking performance.
     pub timestamp: Option<f64>,
 
     /// The values of the sample.

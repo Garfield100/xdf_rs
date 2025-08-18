@@ -61,7 +61,6 @@ use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFoot
 use errors::{ParseError, StreamError, XDFError};
 pub use streams::Stream;
 use strict_num::FiniteF64;
-use strict_num::NonZeroPositiveF64;
 use tracing::{instrument, warn};
 
 use crate::chunk_structs::Chunk;
@@ -87,7 +86,7 @@ pub struct XDFFile {
     pub streams: Vec<Stream>,
 }
 
-pub mod format;
+mod format;
 pub use format::Format;
 
 // TODO why the fuck did I do it this way, now one has to match on every single sample even if one of the few things
@@ -366,11 +365,16 @@ fn process_samples(
     if let Some((first, rest)) = sample_iterators.split_first_mut() {
         // We store each set of iterators with the first iter's first timestamp in a tuple
         let mut first = first.peekable();
+
         let first_ts = first
             .peek()
             .and_then(|s| s.timestamp)
             .and_then(FiniteF64::new)
-            .unwrap_or(FiniteF64::new(1.0).expect("Unreachable"));
+            .unwrap_or_else(|| match FiniteF64::new(1.0) {
+                Some(x) => x,
+                None => unreachable!("FiniteF64::new(1.0) always returns Some(_)"),
+            });
+
         sample_iterators_merged.push((first_ts, vec![first]));
 
         for it in rest {
