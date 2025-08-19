@@ -67,14 +67,16 @@ use crate::chunk_structs::Chunk;
 
 mod parsers;
 use crate::parsers::xdf_file::xdf_file_parser;
+use crate::sample::SampleBytes;
+use crate::streams::StreamEnum;
 
 pub(crate) type StreamID = u32;
-type SampleIter = std::vec::IntoIter<Sample>;
+type SampleIter<'a> = std::vec::IntoIter<SampleBytes<'a>>;
 
 /// XDF file struct  
 /// The main struct representing an XDF file.
 #[derive(Debug, Clone, PartialEq)]
-pub struct XDFFile {
+pub struct XDFFile<'a> {
     /// XDF version. Currently only 1.0 exists according to the specification.
     pub version: f32,
     // TODO add convenience functions for XML reading
@@ -83,15 +85,12 @@ pub struct XDFFile {
     pub header: xmltree::Element,
 
     /// A vector of streams contained in the XDF file.
-    pub streams: Vec<Stream>,
+    pub streams: Vec<StreamEnum<'a>>,
 }
 
 mod format;
 pub use format::Format;
 
-// TODO why the fuck did I do it this way, now one has to match on every single sample even if one of the few things
-// this format guarantees is that all the samples in a stream are of the same type?
-/// The values of a sample in a stream. The values are stored as a vector of the corresponding type (or a string).
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Values {
@@ -105,14 +104,14 @@ pub enum Values {
 }
 
 #[derive(Debug)]
-struct GroupedChunks {
+struct GroupedChunks<'a> {
     stream_header_chunks: Vec<StreamHeaderChunk>,
     stream_footer_chunks: Vec<StreamFooterChunk>,
     clock_offsets: HashMap<StreamID, Vec<ClockOffsetChunk>>,
-    sample_map: HashMap<StreamID, Vec<SampleIter>>,
+    sample_map: HashMap<StreamID, Vec<SampleIter<'a>>>,
 }
 
-impl XDFFile {
+impl<'a> XDFFile<'a> {
     /**
     Parse an XDF file from a byte slice.
     # Arguments
@@ -132,8 +131,9 @@ impl XDFFile {
     # }
     ```
     */
+    // TODO remove this lifetime by replacing &str with String/CoW/interned handle. Numeric Samples already each have a Vec, why am I shying away from using Strings?
     #[instrument(level = "trace", skip(bytes))]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, XDFError> {
         // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes)
             .map_err(|e| match e {
@@ -227,8 +227,8 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
 }
 
 /// takes grouped chunks and combines them into finished streams.
-#[instrument(level = "trace")]
-fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
+// #[instrument(level = "trace")]
+fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<StreamEnum>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
         .into_iter()
@@ -262,14 +262,10 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
         }
     }
 
-    let mut streams_vec: Vec<Stream> = Vec::new();
+    let mut streams_vec: Vec<StreamEnum> = Vec::new();
 
     for (stream_id, stream_header) in stream_header_map {
         let stream_footer = stream_footer_map.remove(&stream_id);
-
-        let name = stream_header.info.name;
-
-        let stream_type = stream_header.info.stream_type;
 
         let mut stream_offsets = grouped_chunks
             .clock_offsets
@@ -283,71 +279,99 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             return Err(ParseError::InvalidClockOffset.into());
         }
 
-        let samples_vec: Vec<Sample> = process_samples(
-            grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default(),
-            &stream_offsets,
-            stream_header.info.nominal_srate,
-        );
+        // let stream = process_single_stream;
 
-        let measured_srate = if let Some(nominal_srate) = stream_header.info.nominal_srate {
-            // nominal_srate is given as "a floating point number in Hertz. If the stream
-            // has an irregular sampling rate (that is, the samples are not spaced evenly in
-            // time, for example in an event stream), this value must be 0."
-            // we use None instead of 0.
+        let format = stream_header.info.channel_format;
+        let sample_iters = grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default();
+        let processing_args = (sample_iters, stream_id, stream_header, stream_footer, stream_offsets);
 
-            let first_timestamp: Option<f64> = samples_vec.first().and_then(|s| s.timestamp);
-            let last_timestamp: Option<f64> = samples_vec.last().and_then(|s| s.timestamp);
-
-            if let (Some(first_timestamp), Some(last_timestamp)) = (first_timestamp, last_timestamp) {
-                let delta = last_timestamp - first_timestamp;
-                if delta <= 0.0 || !delta.is_finite() {
-                    None // don't divide by zero :)
-                } else {
-                    let measured_srate = (samples_vec.len() - 1) as f64 / delta; // samples_vec.len() - 1 because we want the number of "gaps" between samples
-
-                    let ratio = measured_srate / nominal_srate;
-
-                    if (ratio - 1.0).abs() > 0.1 {
-                        warn!("Measured srate deviates more than 10% from the nominal srate: expected nominal of {nominal_srate} Hz but measured {measured_srate} Hz.")
-                    }
-
-                    Some(measured_srate)
-                }
-            } else {
-                None
-            }
-        } else {
-            None
+        let stream_enum = match format {
+            Format::Int8 => StreamEnum::Int8(process_single_stream(processing_args)),
+            Format::Int16 => StreamEnum::Int16(process_single_stream(processing_args)),
+            Format::Int32 => StreamEnum::Int32(process_single_stream(processing_args)),
+            Format::Int64 => StreamEnum::Int64(process_single_stream(processing_args)),
+            Format::Float32 => StreamEnum::Float32(process_single_stream(processing_args)),
+            Format::Float64 => StreamEnum::Float64(process_single_stream(processing_args)),
+            Format::Str => StreamEnum::Str(process_single_stream(processing_args)),
         };
 
-        let stream = Stream {
-            id: stream_id,
-            channel_count: stream_header.info.channel_count,
-            nominal_srate: stream_header.info.nominal_srate,
-            format: stream_header.info.channel_format,
-
-            name,
-            content_type: stream_type,
-            header: stream_header.xml,
-            footer: stream_footer.map(|s| s.xml),
-            measured_srate,
-            samples: samples_vec,
-        };
-
-        streams_vec.push(stream);
+        streams_vec.push(stream_enum);
     }
 
     Ok(streams_vec)
 }
 
+fn process_single_stream<T: StreamFormat>(
+    processing_args: (
+        Vec<SampleIter>,
+        u32,
+        StreamHeaderChunk,
+        Option<StreamFooterChunk>,
+        Vec<ClockOffsetChunk>,
+    ),
+) -> Stream<T> {
+    let (sample_iterators, stream_id, stream_header, stream_footer, stream_offsets) = processing_args;
+
+    let name = stream_header.info.name;
+    let stream_type = stream_header.info.stream_type;
+    let samples_vec: Vec<Sample<_>> =
+        process_samples::<_>(sample_iterators, &stream_offsets, stream_header.info.nominal_srate);
+
+    let measured_srate = if let Some(nominal_srate) = stream_header.info.nominal_srate {
+        // nominal_srate is given as "a floating point number in Hertz. If the stream
+        // has an irregular sampling rate (that is, the samples are not spaced evenly in
+        // time, for example in an event stream), this value must be 0."
+        // we use None instead of 0.
+
+        let first_timestamp: Option<f64> = samples_vec.first().and_then(|s| s.timestamp);
+        let last_timestamp: Option<f64> = samples_vec.last().and_then(|s| s.timestamp);
+
+        if let (Some(first_timestamp), Some(last_timestamp)) = (first_timestamp, last_timestamp) {
+            let delta = last_timestamp - first_timestamp;
+            if delta <= 0.0 || !delta.is_finite() {
+                None // don't divide by zero :)
+            } else {
+                let measured_srate = (samples_vec.len() - 1) as f64 / delta; // samples_vec.len() - 1 because we want the number of "gaps" between samples
+
+                let ratio = measured_srate / nominal_srate;
+
+                if (ratio - 1.0).abs() > 0.1 {
+                    warn!("Measured srate deviates more than 10% from the nominal srate: expected nominal of {nominal_srate} Hz but measured {measured_srate} Hz.")
+                }
+
+                Some(measured_srate)
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let stream = Stream {
+        id: stream_id,
+        channel_count: stream_header.info.channel_count,
+        nominal_srate: stream_header.info.nominal_srate,
+        format: stream_header.info.channel_format,
+
+        name,
+        content_type: stream_type,
+        header: stream_header.xml,
+        footer: stream_footer.map(|s| s.xml),
+        measured_srate,
+        samples: samples_vec,
+    };
+    stream
+}
+
 /// takes a bunch of iterators over a stream's samples and some offsets and
 /// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
 #[instrument(level = "trace")]
-fn process_samples(
+fn process_samples<T: StreamFormat>(
     mut sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],
     nominal_srate: Option<f64>,
-) -> Vec<Sample> {
+) -> Vec<Sample<T>> {
     debug_assert!(stream_offsets
         .iter()
         .all(|o| o.stream_id == stream_offsets[0].stream_id));
@@ -408,7 +432,9 @@ fn process_samples(
         .into_iter()
         .flatten()
         .enumerate()
-        .map(|(i, s)| -> Sample {
+        .map(|(i, s)| -> Sample<T> {
+            let values: Vec<T> = parse_values::<T>(s.values_bytes);
+
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
                     // if the sample has its own timestamp, use that and update the most recent timestamp
@@ -423,15 +449,19 @@ fn process_samples(
 
                 let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, stream_offsets, &mut offset_index));
 
-                Sample {
-                    timestamp,
-                    values: s.values,
-                }
+                Sample { timestamp, values }
             } else {
-                s
+                Sample {
+                    timestamp: s.timestamp,
+                    values,
+                }
             }
         })
         .collect()
+}
+
+fn parse_values<T: StreamFormat>(s: &[u8]) -> Vec<T> {
+    todo!()
 }
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.

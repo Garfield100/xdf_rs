@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use zerocopy::{Immutable, IntoBytes};
+use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use crate::{writer::Sealed, Format};
 
@@ -15,11 +15,23 @@ macro_rules! define_stream_type {
     };
 }
 
+pub(crate) trait MyFromBytes: Sized {
+    fn from_bytes(bytes: &[u8]) -> Vec<Self>; 
+}
+
+impl<T: NumberFormat> MyFromBytes for T {
+    fn from_bytes(bytes: &[u8]) -> Vec<Self> {
+        let nums: &[Self] = transmute_ref!(bytes);
+        nums.to_vec()
+        
+    }
+}
+
 /// Trait implemented for valid stream formats.
 ///
 /// Mostly a marker trait. Sealed as it is not meant to be implemented for other types.
 #[allow(private_bounds)]
-pub trait StreamFormat: Sized + Debug + Immutable + Sealed {
+pub trait StreamFormat: Sized + Debug + Immutable + KnownLayout + Sealed + Clone + PartialEq {
     /// Returns the [`Format`] associated with this type
     fn get_format() -> Format;
 }
@@ -30,13 +42,13 @@ define_stream_type!(i32, Format::Int32);
 define_stream_type!(i64, Format::Int64);
 define_stream_type!(f32, Format::Float32);
 define_stream_type!(f64, Format::Float64);
-define_stream_type!(&str, Format::String);
+define_stream_type!(&str, Format::Str);
 
 /// Marker trait for stream formats which are not string.
 ///
 /// Sealed as it is not meant to be implemented for other types.
 #[allow(private_bounds)]
-pub trait NumberFormat: StreamFormat + IntoBytes + Sealed {}
+pub trait NumberFormat: StreamFormat + IntoBytes + FromBytes + Sealed {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}
 impl NumberFormat for i32 {}

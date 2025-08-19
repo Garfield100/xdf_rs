@@ -1,4 +1,4 @@
-use crate::{Format, Sample};
+use crate::{Format, Sample, StreamFormat};
 
 // minimal tags in version 1.0:
 // channel count
@@ -13,7 +13,7 @@ use crate::{Format, Sample};
 // TODO Maybe make the stream's format a generic type argument, and then same for the samples they contain and the values within.
 // TODO add derives
 #[derive(Debug, Clone, PartialEq)]
-pub struct Stream {
+pub struct Stream<T: StreamFormat> {
     pub id: u32, // not really necessary but nice for debugging and testing
     pub channel_count: u32,
     // TODO Use NonZeroPositiveF64 here
@@ -30,5 +30,16 @@ pub struct Stream {
     // TODO Use NonZeroPositiveF64 here
     pub measured_srate: Option<f64>,
 
-    pub samples: Vec<Sample>,
+    pub samples: Vec<Sample<T>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamEnum<'a> {
+    Int8(Stream<i8>),
+    Int16(Stream<i16>),
+    Int32(Stream<i32>),
+    Int64(Stream<i64>),
+    Float32(Stream<f32>),
+    Float64(Stream<f64>),
+    Str(Stream<&'a str>),
 }

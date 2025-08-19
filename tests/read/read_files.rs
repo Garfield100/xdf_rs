@@ -184,10 +184,10 @@ fn read_minimal_xdf() {
 
     // check format
     match second_stream.format {
-        Format::String => (),
+        Format::Str => (),
         _ => panic!(
             "unexpected format of second stream. Expected {:?}, got {:?}",
-            Format::String,
+            Format::Str,
             second_stream.format
         ),
     }

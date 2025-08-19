@@ -10,11 +10,10 @@ use nom::{
 use tracing::{instrument, trace};
 
 use crate::{
-    chunk_structs::{SamplesChunk, StreamHeaderChunkInfo},
-    Format, Sample,
+    chunk_structs::{SamplesChunk, StreamHeaderChunkInfo}, parsers::values_bytes, sample::SampleBytes, Format, Sample
 };
 
-use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id, values};
+use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id};
 
 #[instrument(level = "trace", skip(input), ret)]
 fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
@@ -39,11 +38,11 @@ fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
 // [0 or 8] [Double, in seconds] [Value as defined by format] ...
 // [1][8 if TimeStampBytes==8, 0 if TimeStampBytes==0] [[Variable]] ...
 #[instrument(level = "trace", skip(input))]
-fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], Sample> {
+fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], SampleBytes> {
     let (input, timestamp) = context("sample optional_timestamp", optional_timestamp)(input)?;
-    let (input, values) = context("sample values", |i| values(i, format, num_channels))(input)?;
+    let (input, values_bytes) = context("sample values", |i| values_bytes(i, format, num_channels))(input)?;
 
-    Ok((input, Sample { timestamp, values }))
+    Ok((input, SampleBytes { timestamp, values_bytes }))
 }
 
 #[allow(clippy::needless_pass_by_value)]

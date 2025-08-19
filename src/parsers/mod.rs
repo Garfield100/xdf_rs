@@ -22,5 +22,5 @@ use samples::samples;
 use stream_footer::stream_footer;
 use stream_header::stream_header;
 use stream_id::stream_id;
-use values::values;
+use values::values_bytes;
 use xml::xml;

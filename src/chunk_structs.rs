@@ -2,13 +2,13 @@ use std::cmp::Ordering;
 
 use xmltree::Element;
 
-use crate::{Format, Sample};
+use crate::{sample::SampleBytes, Format, Sample};
 
 #[derive(Debug)]
-pub(crate) enum Chunk {
+pub(crate) enum Chunk<'a> {
     FileHeader(FileHeaderChunk),
     StreamHeader(StreamHeaderChunk),
-    Samples(SamplesChunk),
+    Samples(SamplesChunk<'a>),
     ClockOffset(ClockOffsetChunk),
     Boundary(BoundaryChunk),
     StreamFooter(StreamFooterChunk),
@@ -52,9 +52,9 @@ pub(crate) struct StreamHeaderChunk {
 }
 
 #[derive(Debug)]
-pub(crate) struct SamplesChunk {
+pub(crate) struct SamplesChunk<'a> {
     pub stream_id: u32,
-    pub samples: Vec<Sample>,
+    pub samples: Vec<SampleBytes<'a>>,
 }
 
 //collection_time and offset_value are in seconds

@@ -16,7 +16,21 @@ pub enum Format {
     /// 64-bit floating point number
     Float64,
     /// UTF-8 encoded string, for example for event markers.
-    String,
+    Str,
+}
+
+impl Format {
+    pub fn value_size(self) -> Option<u8> {
+        match self {
+            Format::Int8 => Some(1),
+            Format::Int16 => Some(2),
+            Format::Int32 => Some(4),
+            Format::Int64 => Some(8),
+            Format::Float32 => Some(4),
+            Format::Float64 => Some(8),
+            Format::Str => None,
+        }
+    }
 }
 
 impl From<Format> for &str {
@@ -28,7 +42,7 @@ impl From<Format> for &str {
             Format::Int64 => "int64",
             Format::Float32 => "float32",
             Format::Float64 => "double64",
-            Format::String => "string",
+            Format::Str => "string",
         }
     }
 }
