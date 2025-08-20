@@ -8,7 +8,7 @@ macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {
         impl Sealed for $name {}
         impl StreamFormat for $name {
-            fn get_format() -> Format {
+            fn format() -> Format {
                 $format
             }
         }
@@ -33,7 +33,7 @@ impl<T: NumberFormat> MyFromBytes for T {
 #[allow(private_bounds)]
 pub trait StreamFormat: Sized + Debug + Immutable + KnownLayout + Sealed + Clone + PartialEq {
     /// Returns the [`Format`] associated with this type
-    fn get_format() -> Format;
+    fn format() -> Format;
 }
 
 define_stream_type!(i8, Format::Int8);

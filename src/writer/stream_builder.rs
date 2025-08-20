@@ -54,7 +54,7 @@ impl<W: Write, F: StreamFormat, T: TimestampTrait> StreamBuilder<W, F, T> {
         metadata.children.push(XMLNode::Element(desc));
 
         let channel_count = self.info.channel_count.to_string();
-        let channel_format: String = F::get_format().into();
+        let channel_format: String = F::format().into();
         let nominal_srate = self
             .info
             .nominal_srate

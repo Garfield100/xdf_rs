@@ -286,13 +286,13 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<StreamEnum>,
         let processing_args = (sample_iters, stream_id, stream_header, stream_footer, stream_offsets);
 
         let stream_enum = match format {
-            Format::Int8 => StreamEnum::Int8(process_single_stream(processing_args)),
-            Format::Int16 => StreamEnum::Int16(process_single_stream(processing_args)),
-            Format::Int32 => StreamEnum::Int32(process_single_stream(processing_args)),
-            Format::Int64 => StreamEnum::Int64(process_single_stream(processing_args)),
-            Format::Float32 => StreamEnum::Float32(process_single_stream(processing_args)),
-            Format::Float64 => StreamEnum::Float64(process_single_stream(processing_args)),
-            Format::Str => StreamEnum::Str(process_single_stream(processing_args)),
+            Format::Int8 => StreamEnum::Int8(process_single_stream(processing_args)?),
+            Format::Int16 => StreamEnum::Int16(process_single_stream(processing_args)?),
+            Format::Int32 => StreamEnum::Int32(process_single_stream(processing_args)?),
+            Format::Int64 => StreamEnum::Int64(process_single_stream(processing_args)?),
+            Format::Float32 => StreamEnum::Float32(process_single_stream(processing_args)?),
+            Format::Float64 => StreamEnum::Float64(process_single_stream(processing_args)?),
+            Format::Str => StreamEnum::Str(process_single_stream(processing_args)?),
         };
 
         streams_vec.push(stream_enum);
@@ -309,13 +309,13 @@ fn process_single_stream<T: StreamFormat>(
         Option<StreamFooterChunk>,
         Vec<ClockOffsetChunk>,
     ),
-) -> Stream<T> {
+) -> Result<Stream<T>, XDFError> {
     let (sample_iterators, stream_id, stream_header, stream_footer, stream_offsets) = processing_args;
 
     let name = stream_header.info.name;
     let stream_type = stream_header.info.stream_type;
     let samples_vec: Vec<Sample<_>> =
-        process_samples::<_>(sample_iterators, &stream_offsets, stream_header.info.nominal_srate);
+        process_samples::<_>(sample_iterators, &stream_offsets, stream_header.info.nominal_srate)?;
 
     let measured_srate = if let Some(nominal_srate) = stream_header.info.nominal_srate {
         // nominal_srate is given as "a floating point number in Hertz. If the stream
@@ -361,7 +361,7 @@ fn process_single_stream<T: StreamFormat>(
         measured_srate,
         samples: samples_vec,
     };
-    stream
+    Ok(stream)
 }
 
 /// takes a bunch of iterators over a stream's samples and some offsets and
@@ -371,7 +371,7 @@ fn process_samples<T: StreamFormat>(
     mut sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],
     nominal_srate: Option<f64>,
-) -> Vec<Sample<T>> {
+) -> Result<Vec<Sample<T>>, XDFError> {
     debug_assert!(stream_offsets
         .iter()
         .all(|o| o.stream_id == stream_offsets[0].stream_id));
@@ -428,12 +428,12 @@ fn process_samples<T: StreamFormat>(
         .map(Iterator::peekable)
         .filter_map(|mut it| if it.peek().is_none() { None } else { Some(it) });
 
-    sample_iterators
+    let samples = sample_iterators
         .into_iter()
         .flatten()
         .enumerate()
-        .map(|(i, s)| -> Sample<T> {
-            let values: Vec<T> = parse_values::<T>(s.values_bytes);
+        .flat_map(|(i, s)| -> Result<Sample<T>, XDFError> {
+            let values: Vec<T> = parse_values::<T>(s.values_bytes)?;
 
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
@@ -449,19 +449,29 @@ fn process_samples<T: StreamFormat>(
 
                 let timestamp = timestamp.map(|ts| interpolate_and_add_offsets(ts, stream_offsets, &mut offset_index));
 
-                Sample { timestamp, values }
+                Ok(Sample { timestamp, values })
             } else {
-                Sample {
+                Ok(Sample {
                     timestamp: s.timestamp,
                     values,
-                }
+                })
             }
         })
-        .collect()
+        .collect();
+
+    Ok(samples)
 }
 
-fn parse_values<T: StreamFormat>(s: &[u8]) -> Vec<T> {
-    todo!()
+fn parse_values<T: StreamFormat>(s: &[u8]) -> Result<Vec<T>, ParseError> {
+    match T::format() {
+        Format::Int8 => todo!(),
+        Format::Int16 => todo!(),
+        Format::Int32 => todo!(),
+        Format::Int64 => todo!(),
+        Format::Float32 => todo!(),
+        Format::Float64 => todo!(),
+        Format::Str => todo!(),
+    }
 }
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.

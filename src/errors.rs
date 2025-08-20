@@ -2,6 +2,8 @@
 use std::sync::Arc;
 use thiserror::Error;
 
+use crate::Format;
+
 #[derive(Debug, Error)]
 pub enum XDFError {
     #[error(transparent)]
@@ -78,4 +80,8 @@ pub enum ParseError {
 
     #[error(transparent)]
     Nom(#[from] nom::Err<nom::error::Error<Arc<[u8]>>>),
+
+    #[error("Malformed values of type {0}")]
+    Values(Format)
+
 }
