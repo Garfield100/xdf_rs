@@ -58,6 +58,7 @@ pub(super) fn values_bytes(input: &[u8], format: Format, num_values: usize) -> I
             values_bytes
         }
         Format::Str => {
+            // do not "consume" the input when checking for the total length
             let (_, string_bytes_len) = context(
                 "values String len",
                 multi::fold_many_m_n(num_values, num_values, string_value_size, || 0_u64, u64::wrapping_add),

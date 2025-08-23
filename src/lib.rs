@@ -62,6 +62,8 @@ use errors::{ParseError, StreamError, XDFError};
 pub use streams::Stream;
 use strict_num::FiniteF64;
 use tracing::{instrument, warn};
+use zerocopy::transmute;
+use zerocopy::transmute_ref;
 
 use crate::chunk_structs::Chunk;
 
@@ -462,8 +464,8 @@ fn process_samples<T: StreamFormat>(
     Ok(samples)
 }
 
-fn parse_values<T: StreamFormat>(s: &[u8]) -> Result<Vec<T>, ParseError> {
-    match T::format() {
+fn parse_values<T: StreamFormat>(values_bytes: &[u8]) -> Result<Vec<T>, ParseError> {
+    let values: &[T] = match T::format() {
         Format::Int8 => todo!(),
         Format::Int16 => todo!(),
         Format::Int32 => todo!(),
@@ -471,7 +473,9 @@ fn parse_values<T: StreamFormat>(s: &[u8]) -> Result<Vec<T>, ParseError> {
         Format::Float32 => todo!(),
         Format::Float64 => todo!(),
         Format::Str => todo!(),
-    }
+    };
+
+    todo!()
 }
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.

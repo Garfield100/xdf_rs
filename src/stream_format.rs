@@ -1,8 +1,16 @@
 use std::fmt::Debug;
 
+use nom::{combinator, error::context, IResult};
+use tracing::trace;
 use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes, KnownLayout};
 
-use crate::{writer::Sealed, Format};
+use crate::{
+    chunk_structs,
+    errors::ParseError,
+    parsers::{self, chunk_length::length},
+    writer::Sealed,
+    Format,
+};
 
 macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {
@@ -15,15 +23,45 @@ macro_rules! define_stream_type {
     };
 }
 
+// TODO is this used anywhere? lmao
 pub(crate) trait MyFromBytes: Sized {
-    fn from_bytes(bytes: &[u8]) -> Vec<Self>; 
+    fn from_bytes(input: &[u8]) -> Result<Vec<Self>, ParseError>;
 }
 
 impl<T: NumberFormat> MyFromBytes for T {
-    fn from_bytes(bytes: &[u8]) -> Vec<Self> {
-        let nums: &[Self] = transmute_ref!(bytes);
-        nums.to_vec()
-        
+    /// creates a Vec<T> from a byte slice for the number types, i.e. integers and floats
+    fn from_bytes(input: &[u8]) -> Result<Vec<Self>, ParseError> {
+        // make sure the number of bytes we get is a multiple of the size of T
+        if input.len() % size_of::<T>() == 0 {
+            let nums: &[Self] = transmute_ref!(input);
+            Ok(nums.to_vec())
+        } else {
+            Err(ParseError::Values(T::format()))
+        }
+    }
+}
+
+fn string_value(input: &[u8]) -> IResult<&[u8], String> {
+    let (input, length) = length(input)?;
+    trace!("String value is {length} bytes long");
+
+    let (input, string_bytes) = nom::bytes::complete::take(length)(input)?;
+    let Ok(string) = String::from_utf8(string_bytes.to_vec()) else {
+        return context("string_value invalid utf8", combinator::fail)(&[0]);
+    };
+
+    Ok((input, string))
+}
+
+impl MyFromBytes for &str {
+    fn from_bytes(input: &[u8]) -> Result<Vec<Self>, ParseError> {
+        let (input, strings) = nom::multi::many0(string_value)(input).map_err(|_| ParseError::Values(Format::Str))?;
+
+        if input.is_empty() {
+            Err(ParseError::Values(Format::Str))
+        } else {
+            Ok(strings)
+        }
     }
 }
 
@@ -31,7 +69,7 @@ impl<T: NumberFormat> MyFromBytes for T {
 ///
 /// Mostly a marker trait. Sealed as it is not meant to be implemented for other types.
 #[allow(private_bounds)]
-pub trait StreamFormat: Sized + Debug + Immutable + KnownLayout + Sealed + Clone + PartialEq {
+pub trait StreamFormat: Sized + Debug + Immutable + KnownLayout + Sealed + Clone + PartialEq + MyFromBytes {
     /// Returns the [`Format`] associated with this type
     fn format() -> Format;
 }

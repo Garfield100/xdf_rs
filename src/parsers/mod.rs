@@ -1,4 +1,4 @@
-mod chunk_length;
+pub(crate) mod chunk_length;
 mod chunk_tags;
 
 mod boundary;
