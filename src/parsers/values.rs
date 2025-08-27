@@ -57,7 +57,7 @@ pub(super) fn values_bytes(input: &[u8], format: Format, num_values: usize) -> I
             (input, values_bytes) = context("values Float32", take(8 * num_values))(input)?;
             values_bytes
         }
-        Format::Str => {
+        Format::String => {
             // do not "consume" the input when checking for the total length
             let (_, string_bytes_len) = context(
                 "values String len",

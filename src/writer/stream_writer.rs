@@ -263,7 +263,7 @@ where
 }
 
 // implementation for string streams with timestamps
-impl<W> StreamWriter<W, &str, HasTimestamps>
+impl<W> StreamWriter<W, String, HasTimestamps>
 where
     W: Write,
 {

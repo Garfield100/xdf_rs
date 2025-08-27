@@ -34,12 +34,12 @@ pub struct Stream<T: StreamFormat> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum StreamEnum<'a> {
+pub enum StreamEnum {
     Int8(Stream<i8>),
     Int16(Stream<i16>),
     Int32(Stream<i32>),
     Int64(Stream<i64>),
     Float32(Stream<f32>),
     Float64(Stream<f64>),
-    Str(Stream<&'a str>),
+    Str(Stream<String>),
 }

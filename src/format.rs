@@ -16,7 +16,7 @@ pub enum Format {
     /// 64-bit floating point number
     Float64,
     /// UTF-8 encoded string, for example for event markers.
-    Str,
+    String,
 }
 
 impl Format {
@@ -28,7 +28,7 @@ impl Format {
             Format::Int64 => Some(8),
             Format::Float32 => Some(4),
             Format::Float64 => Some(8),
-            Format::Str => None,
+            Format::String => None,
         }
     }
 }
@@ -42,7 +42,7 @@ impl From<Format> for &str {
             Format::Int64 => "int64",
             Format::Float32 => "float32",
             Format::Float64 => "double64",
-            Format::Str => "string",
+            Format::String => "string",
         }
     }
 }

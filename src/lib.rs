@@ -78,7 +78,7 @@ type SampleIter<'a> = std::vec::IntoIter<SampleBytes<'a>>;
 /// XDF file struct  
 /// The main struct representing an XDF file.
 #[derive(Debug, Clone, PartialEq)]
-pub struct XDFFile<'a> {
+pub struct XDFFile {
     /// XDF version. Currently only 1.0 exists according to the specification.
     pub version: f32,
     // TODO add convenience functions for XML reading
@@ -87,7 +87,7 @@ pub struct XDFFile<'a> {
     pub header: xmltree::Element,
 
     /// A vector of streams contained in the XDF file.
-    pub streams: Vec<StreamEnum<'a>>,
+    pub streams: Vec<StreamEnum>,
 }
 
 mod format;
@@ -113,7 +113,7 @@ struct GroupedChunks<'a> {
     sample_map: HashMap<StreamID, Vec<SampleIter<'a>>>,
 }
 
-impl<'a> XDFFile<'a> {
+impl XDFFile {
     /**
     Parse an XDF file from a byte slice.
     # Arguments
@@ -133,9 +133,9 @@ impl<'a> XDFFile<'a> {
     # }
     ```
     */
-    // TODO remove this lifetime by replacing &str with String/CoW/interned handle. Numeric Samples already each have a Vec, why am I shying away from using Strings?
+    // TODO make tracing an optional feature to further reduce dependencies
     #[instrument(level = "trace", skip(bytes))]
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, XDFError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
         // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes)
             .map_err(|e| match e {
@@ -294,7 +294,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<StreamEnum>,
             Format::Int64 => StreamEnum::Int64(process_single_stream(processing_args)?),
             Format::Float32 => StreamEnum::Float32(process_single_stream(processing_args)?),
             Format::Float64 => StreamEnum::Float64(process_single_stream(processing_args)?),
-            Format::Str => StreamEnum::Str(process_single_stream(processing_args)?),
+            Format::String => StreamEnum::Str(process_single_stream(processing_args)?),
         };
 
         streams_vec.push(stream_enum);
@@ -472,7 +472,7 @@ fn parse_values<T: StreamFormat>(values_bytes: &[u8]) -> Result<Vec<T>, ParseErr
         Format::Int64 => todo!(),
         Format::Float32 => todo!(),
         Format::Float64 => todo!(),
-        Format::Str => todo!(),
+        Format::String => todo!(),
     };
 
     todo!()

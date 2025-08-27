@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{borrow::Cow, fmt::Debug, rc::Rc};
 
 use nom::{combinator, error::context, IResult};
 use tracing::trace;
@@ -53,14 +53,15 @@ fn string_value(input: &[u8]) -> IResult<&[u8], String> {
     Ok((input, string))
 }
 
-impl MyFromBytes for &str {
+impl MyFromBytes for String {
     fn from_bytes(input: &[u8]) -> Result<Vec<Self>, ParseError> {
-        let (input, strings) = nom::multi::many0(string_value)(input).map_err(|_| ParseError::Values(Format::Str))?;
+        let (input, strings) =
+            nom::multi::many0(string_value)(input).map_err(|_| ParseError::Values(Format::String))?;
 
         if input.is_empty() {
-            Err(ParseError::Values(Format::Str))
+            Err(ParseError::Values(Format::String))
         } else {
-            Ok(strings)
+            Ok(strings.into_iter().map(|s| s.into()).collect())
         }
     }
 }
@@ -69,10 +70,12 @@ impl MyFromBytes for &str {
 ///
 /// Mostly a marker trait. Sealed as it is not meant to be implemented for other types.
 #[allow(private_bounds)]
-pub trait StreamFormat: Sized + Debug + Immutable + KnownLayout + Sealed + Clone + PartialEq + MyFromBytes {
+pub trait StreamFormat: Sized + Debug + Sealed + Clone + PartialEq + MyFromBytes {
     /// Returns the [`Format`] associated with this type
     fn format() -> Format;
 }
+
+struct ImmutableString(String);
 
 define_stream_type!(i8, Format::Int8);
 define_stream_type!(i16, Format::Int16);
@@ -80,13 +83,13 @@ define_stream_type!(i32, Format::Int32);
 define_stream_type!(i64, Format::Int64);
 define_stream_type!(f32, Format::Float32);
 define_stream_type!(f64, Format::Float64);
-define_stream_type!(&str, Format::Str);
+define_stream_type!(String, Format::String);
 
 /// Marker trait for stream formats which are not string.
 ///
 /// Sealed as it is not meant to be implemented for other types.
 #[allow(private_bounds)]
-pub trait NumberFormat: StreamFormat + IntoBytes + FromBytes + Sealed {}
+pub trait NumberFormat: StreamFormat + IntoBytes + FromBytes + Immutable + Sealed {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}
 impl NumberFormat for i32 {}
