@@ -1,6 +1,6 @@
 use std::fs;
 
-use xdf::{Format, Sample, Values, XDFFile};
+use xdf::{streams::SampleEnum, Format, Sample, StreamFormat, XDFFile};
 use xmltree::{Element, XMLNode};
 
 // The goal here is just to have something resembling a simple app that prints stats about the file.
@@ -29,11 +29,11 @@ fn print_stats_app() {
     }
 }
 
-fn print_stream(stream: xdf::Stream) {
+fn print_stream(stream: xdf::streams::Stream) {
     let id = stream.id;
     let channel_count = stream.channel_count;
     let nominal_srate = stream.nominal_srate.map_or("None".to_string(), |f| f.to_string());
-    let format = stream.format;
+    let format = stream.format();
     let name = stream.name.unwrap_or_default();
     let content_type = stream.content_type.unwrap_or("No content type".to_string());
     let measured_srate = stream.measured_srate.map_or("None".to_string(), |f| f.to_string());
@@ -49,7 +49,7 @@ fn print_stream(stream: xdf::Stream) {
     let footer_values = footer_tags.flat_map(Element::get_text);
     let footer_content = footer_keys.zip(footer_values);
 
-    let samples = stream.samples;
+    let samples = stream.sample_enum;
 
     println!("\n\n=== Printing stream with name \"{name}\" ===");
     println!("ID: {id}");
@@ -71,20 +71,24 @@ fn print_stream(stream: xdf::Stream) {
     println!();
 
     println!("\nSamples:");
-    samples.iter().for_each(print_sample);
+    match samples {
+        SampleEnum::Int8(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::Int16(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::Int32(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::Int64(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::Float32(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::Float64(samples) => samples.iter().for_each(print_sample),
+        SampleEnum::String(samples) => samples.iter().for_each(print_sample),
+    }
     println!("========================");
 }
 
 fn print_format(format: Format) {
     println!("Format: {format}")
 }
-fn print_sample(sample: &Sample) {
+fn print_sample<T: StreamFormat>(sample: &Sample<T>) {
     let timestamp = sample.timestamp.map_or("None".to_string(), |f| f.to_string());
     println!("Timestamp: {timestamp}");
 
-    print_values(&sample.values);
-}
-
-fn print_values(values: &Values) {
-    println!("Values: {values:?}");
+    println!("Values: {:?}", sample.values)
 }

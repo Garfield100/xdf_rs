@@ -7,8 +7,9 @@ use zerocopy::{Immutable, IntoBytes};
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
 use xdf::{
+    streams::SampleEnum,
     writer::{HasMetadataAndDesc, HasTimestamps, NoTimestamps, StreamInfo, XDFBuilder},
-    Values, XDFFile,
+    Format, XDFFile,
 };
 use xdf::{NumberFormat, StreamFormat};
 
@@ -35,18 +36,11 @@ simple_num_tests!(i64);
 simple_num_tests!(f32);
 simple_num_tests!(f64);
 
-fn values_as_u64(val: &Values) -> Vec<u64> {
-    match val {
-        Values::Int8(v) => v.iter().map(|n| *n as u64).collect(),
-        Values::Int16(v) => v.iter().map(|n| *n as u64).collect(),
-        Values::Int32(v) => v.iter().map(|n| *n as u64).collect(),
-        Values::Int64(v) => v.iter().map(|n| *n as u64).collect(),
-        Values::Float32(v) => v.iter().map(|n| n.to_bits() as u64).collect(),
-        Values::Float64(v) => v.iter().map(|n| n.to_bits()).collect(),
-        Values::Strings(_) => {
-            panic!("String values are not supported in this test");
-        }
-    }
+fn values_as_u64<T: NumberFormat>(values: &Vec<T>) -> Vec<u64> {
+    values
+        .iter()
+        .map(|n| u64::from_le_bytes(n.as_bytes().try_into().unwrap()))
+        .collect()
 }
 
 fn to_u64<T: IntoBytes + Immutable>(value: T) -> u64 {
@@ -94,7 +88,7 @@ fn write_simple_num_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> 
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), samples.len());
+    assert_eq!(stream.sample_enum.len(), samples.len());
     {
         let measured = stream.measured_srate.unwrap();
         let nominal = stream_info.nominal_srate.unwrap().get();
@@ -105,14 +99,38 @@ fn write_simple_num_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> 
             "Expected measured {measured} to be within {EPSILON} of nominal {nominal}, actual abs. diff. was {abs_diff}, {}x larger than the epsilon.", abs_diff / EPSILON);
     }
 
+    let sample_vec_values = |i: usize| match (T::format(), &stream.sample_enum) {
+        (Format::Int8, SampleEnum::Int8(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int16, SampleEnum::Int16(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int32, SampleEnum::Int32(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int64, SampleEnum::Int64(samples)) => values_as_u64(&samples[i].values),
+        (Format::Float32, SampleEnum::Float32(samples)) => values_as_u64(&samples[i].values),
+        (Format::Float64, SampleEnum::Float64(samples)) => values_as_u64(&samples[i].values),
+        (Format::String, SampleEnum::String(_)) => {
+            panic!("String values are not supported in this test and should not appear")
+        }
+        (expected, actual) => panic!("Type mismatch: expected {} but read {}", expected, actual.format()),
+    };
+
+    let sample_vec_timestamp = |i: usize| match (T::format(), &stream.sample_enum) {
+        (Format::Int8, SampleEnum::Int8(samples)) => samples[i].timestamp,
+        (Format::Int16, SampleEnum::Int16(samples)) => samples[i].timestamp,
+        (Format::Int32, SampleEnum::Int32(samples)) => samples[i].timestamp,
+        (Format::Int64, SampleEnum::Int64(samples)) => samples[i].timestamp,
+        (Format::Float32, SampleEnum::Float32(samples)) => samples[i].timestamp,
+        (Format::Float64, SampleEnum::Float64(samples)) => samples[i].timestamp,
+        (Format::String, SampleEnum::String(samples)) => samples[i].timestamp,
+        (expected, actual) => panic!("Type mismatch: expected {} but read {}", expected, actual.format()),
+    };
+
     for (i, expected_sample) in samples.iter().enumerate() {
         assert_eq!(
-            values_as_u64(&stream.samples[i].values),
+            sample_vec_values(i),
             expected_sample.iter().map(|v| to_u64(*v)).collect::<Vec<_>>()
         );
         let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
         dbg!(expected_timestamp);
-        assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
+        assert_eq!(sample_vec_timestamp(i).unwrap(), expected_timestamp);
     }
 
     // TODO test footer info
@@ -191,11 +209,24 @@ fn write_simple_num_no_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), samples.len());
+    assert_eq!(stream.sample_enum.len(), samples.len());
+
+    let sample_vec_values = |i: usize| match (T::format(), &stream.sample_enum) {
+        (Format::Int8, SampleEnum::Int8(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int16, SampleEnum::Int16(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int32, SampleEnum::Int32(samples)) => values_as_u64(&samples[i].values),
+        (Format::Int64, SampleEnum::Int64(samples)) => values_as_u64(&samples[i].values),
+        (Format::Float32, SampleEnum::Float32(samples)) => values_as_u64(&samples[i].values),
+        (Format::Float64, SampleEnum::Float64(samples)) => values_as_u64(&samples[i].values),
+        (Format::String, SampleEnum::String(_)) => {
+            panic!("String values are not supported in this test and should not appear")
+        }
+        (expected, actual) => panic!("Type mismatch: expected {} but read {}", expected, actual.format()),
+    };
 
     for (i, expected_sample) in samples.iter().enumerate() {
         assert_eq!(
-            values_as_u64(&stream.samples[i].values),
+            sample_vec_values(i),
             expected_sample.iter().map(|v| to_u64(*v)).collect::<Vec<_>>()
         );
     }

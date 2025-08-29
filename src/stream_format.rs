@@ -1,16 +1,10 @@
-use std::{borrow::Cow, fmt::Debug, rc::Rc};
+use std::fmt::Debug;
 
 use nom::{combinator, error::context, IResult};
 use tracing::trace;
-use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes, KnownLayout};
+use zerocopy::{transmute_ref, FromBytes, Immutable, IntoBytes};
 
-use crate::{
-    chunk_structs,
-    errors::ParseError,
-    parsers::{self, chunk_length::length},
-    writer::Sealed,
-    Format,
-};
+use crate::{errors::ParseError, parsers::chunk_length::length, writer::Sealed, Format};
 
 macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {

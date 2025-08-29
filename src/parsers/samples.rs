@@ -10,7 +10,10 @@ use nom::{
 use tracing::{instrument, trace};
 
 use crate::{
-    chunk_structs::{SamplesChunk, StreamHeaderChunkInfo}, parsers::values_bytes, sample::SampleBytes, Format, Sample
+    chunk_structs::{SamplesChunk, StreamHeaderChunkInfo},
+    parsers::values_bytes,
+    sample::SampleBytes,
+    Format, Sample,
 };
 
 use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id};
@@ -42,7 +45,13 @@ fn sample(input: &[u8], num_channels: usize, format: Format) -> IResult<&[u8], S
     let (input, timestamp) = context("sample optional_timestamp", optional_timestamp)(input)?;
     let (input, values_bytes) = context("sample values", |i| values_bytes(i, format, num_channels))(input)?;
 
-    Ok((input, SampleBytes { timestamp, values_bytes }))
+    Ok((
+        input,
+        SampleBytes {
+            timestamp,
+            values_bytes,
+        },
+    ))
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -69,8 +78,11 @@ pub(super) fn samples(
     #[cfg(test)]
     if !_chunk_content.is_empty() {
         panic!(
-            "Chunk was not read completely, there are {} bytes left.",
-            chunk_content.len()
+            "Samples chunk was not read completely, there are {} bytes left. {} samples were successfully parsed from it.\nParsed samples:{:?}\nLeftover bytes: {:?}",
+            chunk_content.len(),
+            samples.len(),
+            samples,
+            chunk_content
         )
     }
 

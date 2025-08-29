@@ -1,7 +1,7 @@
 use nom::{bytes::complete::take, combinator, error::context, multi, number, IResult};
 use tracing::{instrument, trace};
 
-use crate::{Format, Values};
+use crate::{Format};
 
 use super::chunk_length::length;
 

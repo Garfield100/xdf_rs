@@ -4,8 +4,9 @@ use tracing::debug;
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
 use xdf::{
+    streams::SampleEnum,
     writer::{HasMetadataAndDesc, HasTimestamps, StreamInfo, XDFBuilder},
-    Values, XDFFile,
+    XDFFile,
 };
 
 // TODO deduplicate
@@ -16,7 +17,7 @@ fn write_simple_str_two_ch() {
     let mut writer = XDFBuilder::new().build(&mut buffer).unwrap();
     let stream_info = StreamInfo::new(2, Some(NonZeroPositiveF64::new(100.0).unwrap()));
     let mut stream = writer
-        .add_stream::<&str, HasTimestamps>(stream_info.clone())
+        .add_stream::<String, HasTimestamps>(stream_info.clone())
         .name("Test Stream")
         .content_type("Test Content")
         .add_metadata_key("key1", "value1")
@@ -48,7 +49,7 @@ fn write_simple_str_two_ch() {
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), samples.len());
+    assert_eq!(stream.sample_enum.len(), samples.len());
 
     {
         let measured = stream.measured_srate.unwrap();
@@ -60,15 +61,14 @@ fn write_simple_str_two_ch() {
             "Expected measured {measured} to be within {EPSILON} of nominal {nominal}, actual abs. diff. was {abs_diff}, {}x larger than the epsilon.", abs_diff / EPSILON);
     }
 
+    let SampleEnum::String(actual_samples) = &stream.sample_enum else {
+        panic!("Wrong value type for string test");
+    };
+
     for (i, expected_sample) in samples.iter().enumerate() {
-        match &stream.samples[i].values {
-            Values::Strings(strings) => {
-                assert_eq!(strings.as_slice(), expected_sample)
-            }
-            _ => panic!("Wrong value type for string test"),
-        }
+        assert_eq!(actual_samples[i].values.as_slice(), expected_sample);
         let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
-        assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
+        assert_eq!(actual_samples[i].timestamp.unwrap(), expected_timestamp);
     }
 }
 
@@ -78,7 +78,7 @@ fn write_simple_str_one_ch() {
     let mut writer = XDFBuilder::new().build(&mut buffer).unwrap();
     let stream_info = StreamInfo::new(1, Some(NonZeroPositiveF64::new(100.0).unwrap()));
     let mut stream = writer
-        .add_stream::<&str, HasTimestamps>(stream_info.clone())
+        .add_stream::<String, HasTimestamps>(stream_info.clone())
         .name("Test Stream")
         .content_type("Test Content")
         .add_metadata_key("key1", "value1")
@@ -110,7 +110,7 @@ fn write_simple_str_one_ch() {
     assert_eq!(stream.name.as_deref(), Some("Test Stream"));
     assert_eq!(stream.content_type.as_deref(), Some("Test Content"));
     assert_eq!(stream.header.get_child("key1").unwrap().get_text().unwrap(), "value1");
-    assert_eq!(stream.samples.len(), samples.len());
+    assert_eq!(stream.sample_enum.len(), samples.len());
     {
         let measured = stream.measured_srate.unwrap();
         let nominal = stream_info.nominal_srate.unwrap().get();
@@ -121,15 +121,13 @@ fn write_simple_str_one_ch() {
             "Expected measured {measured} to be within {EPSILON} of nominal {nominal}, actual abs. diff. was {abs_diff}, {}x larger than the epsilon.", abs_diff / EPSILON);
     }
 
+    let SampleEnum::String(actual_samples) = &stream.sample_enum else {
+        panic!("Wrong value type for string test");
+    };
+
     for (i, expected_sample) in samples.iter().enumerate() {
-        // assert_eq!(stream.samples[i].values, sample);
-        match &stream.samples[i].values {
-            Values::Strings(strings) => {
-                assert_eq!(strings.as_slice(), expected_sample)
-            }
-            _ => panic!("Wrong value type for string test"),
-        }
+        assert_eq!(actual_samples[i].values.as_slice(), expected_sample);
         let expected_timestamp = timestamp.get() + i as f64 / stream_info.nominal_srate.unwrap().get();
-        assert_eq!(stream.samples[i].timestamp.unwrap(), expected_timestamp);
+        assert_eq!(actual_samples[i].timestamp.unwrap(), expected_timestamp);
     }
 }
