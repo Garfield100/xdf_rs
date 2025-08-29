@@ -36,7 +36,7 @@ simple_num_tests!(i64);
 simple_num_tests!(f32);
 simple_num_tests!(f64);
 
-fn values_as_u64<T: NumberFormat>(values: &Vec<T>) -> Vec<u64> {
+fn values_as_u64<T: NumberFormat>(values: &[T]) -> Vec<u64> {
     values
         .iter()
         .map(|n| u64::from_le_bytes(n.as_bytes().try_into().unwrap()))

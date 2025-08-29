@@ -1,4 +1,4 @@
-use crate::{Format, Sample, StreamFormat, StreamID};
+use crate::{Format, Sample};
 
 // minimal tags in version 1.0:
 // channel count

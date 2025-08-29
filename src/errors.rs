@@ -82,6 +82,5 @@ pub enum ParseError {
     Nom(#[from] nom::Err<nom::error::Error<Arc<[u8]>>>),
 
     #[error("Malformed values of type {0}")]
-    Values(Format)
-
+    Values(Format),
 }

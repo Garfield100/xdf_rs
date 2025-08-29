@@ -1,6 +1,6 @@
 use std::fs;
 
-use xdf::{streams::SampleEnum, Format, XDFFile};
+use xdf::{streams::SampleEnum, XDFFile};
 
 const EPSILON: f64 = 1E-15;
 

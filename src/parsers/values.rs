@@ -1,7 +1,7 @@
-use nom::{bytes::complete::take, combinator, error::context, multi, number, IResult};
+use nom::{bytes::complete::take, error::context, multi, IResult};
 use tracing::{instrument, trace};
 
-use crate::{Format};
+use crate::Format;
 
 use super::chunk_length::length;
 
@@ -39,7 +39,7 @@ pub(super) fn values_bytes(input: &[u8], format: Format, num_values: usize) -> I
         }
         Format::Int8 => {
             let values_bytes;
-            (input, values_bytes) = context("values Float32", take(1 * num_values))(input)?;
+            (input, values_bytes) = context("values Float32", take(num_values))(input)?;
             values_bytes
         }
         Format::Int16 => {

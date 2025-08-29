@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use xmltree::Element;
 
-use crate::{sample::SampleBytes, Format, Sample};
+use crate::{sample::SampleBytes, Format};
 
 #[derive(Debug)]
 pub(crate) enum Chunk<'a> {

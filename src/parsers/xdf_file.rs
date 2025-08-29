@@ -21,7 +21,7 @@ fn magic_number(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 // parses the magic number, the file header, and then all the rest of the chunks. Returns a vector of chunks
-pub(crate) fn xdf_file_parser(input: &[u8]) -> IResult<&[u8], Vec<Chunk>> {
+pub(crate) fn xdf_file_parser(input: &'_ [u8]) -> IResult<&'_ [u8], Vec<Chunk<'_>>> {
     let stream_info_map: HashMap<u32, StreamHeaderChunkInfo> = HashMap::new();
     let cursed: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>> = Rc::new(RefCell::new(stream_info_map));
 

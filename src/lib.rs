@@ -266,13 +266,9 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
             return Err(ParseError::InvalidClockOffset.into());
         }
 
-        // let stream = process_single_stream;
-
-        let format = stream_header.info.channel_format;
         let sample_iters = grouped_chunks.sample_map.remove(&stream_id).unwrap_or_default();
-        let processing_args = (sample_iters, stream_id, stream_header, stream_footer, stream_offsets);
 
-        let stream = process_single_stream(processing_args)?;
+        let stream = process_single_stream(sample_iters, stream_id, stream_header, stream_footer, stream_offsets)?;
 
         streams_vec.push(stream);
     }
@@ -281,15 +277,13 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
 }
 
 fn process_single_stream(
-    processing_args: (
-        Vec<SampleIter>,
-        u32,
-        StreamHeaderChunk,
-        Option<StreamFooterChunk>,
-        Vec<ClockOffsetChunk>,
-    ),
+    sample_iterators: Vec<SampleIter>,
+    stream_id: u32,
+    stream_header: StreamHeaderChunk,
+    stream_footer: Option<StreamFooterChunk>,
+    stream_offsets: Vec<ClockOffsetChunk>,
 ) -> Result<Stream, XDFError> {
-    let (sample_iterators, stream_id, stream_header, stream_footer, stream_offsets) = processing_args;
+    // let (sample_iterators, stream_id, stream_header, stream_footer, stream_offsets) = processing_args;
 
     let name = stream_header.info.name;
     let format = stream_header.info.channel_format;

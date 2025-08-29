@@ -55,7 +55,7 @@ impl MyFromBytes for String {
         if input.is_empty() {
             Err(ParseError::Values(Format::String))
         } else {
-            Ok(strings.into_iter().map(|s| s.into()).collect())
+            Ok(strings.into_iter().collect())
         }
     }
 }
