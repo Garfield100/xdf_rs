@@ -83,7 +83,7 @@ impl<W: Write> WriteHelper<W> {
 
         Ok(())
     }
-    pub(crate) fn get_writer(&mut self) -> &mut W {
+    pub(crate) const fn get_writer(&mut self) -> &mut W {
         &mut self.writer
     }
 

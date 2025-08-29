@@ -20,7 +20,7 @@ pub enum Format {
 }
 
 impl Format {
-    pub fn value_size(self) -> Option<u8> {
+    pub const fn value_size(self) -> Option<u8> {
         match self {
             Format::Int8 => Some(1),
             Format::Int16 => Some(2),
