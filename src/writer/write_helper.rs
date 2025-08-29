@@ -6,6 +6,8 @@ use xmltree::Element;
 
 use crate::{chunk_structs::Tag, writer::length_bytes, StreamID};
 
+
+#[derive(Debug)]
 pub(crate) struct WriteHelper<W: Write> {
     pub(crate) writer: W,
 }

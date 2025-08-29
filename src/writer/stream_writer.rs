@@ -32,6 +32,8 @@ use super::{
     SharedState, StreamID, StreamInfo,
 };
 
+
+#[derive(Debug)]
 pub struct StreamWriter<W: Write, F: StreamFormat, T: TimestampTrait> {
     pub(crate) state: Arc<Mutex<SharedState<W>>>,
     pub(crate) info: StreamInfo,

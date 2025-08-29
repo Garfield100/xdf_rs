@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![deny(nonstandard_style)]
+#![deny(missing_debug_implementations)]
 #![warn(array_into_iter)]
 #![warn(missing_docs)]
 #![warn(rustdoc::all)]

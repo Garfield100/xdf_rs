@@ -61,6 +61,7 @@ macro_rules! length_bytes {
 
 pub(crate) use length_bytes;
 
+#[derive(Debug)]
 pub(crate) struct SharedState<W: Write> {
     write_helper: WriteHelper<W>,
 }
@@ -73,6 +74,7 @@ pub(crate) struct SharedState<W: Write> {
 /// See
 /// TODO add link to XDFBuilder doc example
 #[must_use]
+#[derive(Debug, Clone)] // Can be safely cloned since it does not contain its own state
 pub struct XDFWriter<W: Write> {
     state: Arc<Mutex<SharedState<W>>>,
     num_streams: u32,

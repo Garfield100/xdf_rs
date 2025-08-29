@@ -20,6 +20,7 @@ use super::{
 ///
 ///
 /// Overwritten top-level XML elements: `channel_count`, `nominal_srate`, `channel_format`.
+#[derive(Debug)]
 pub struct StreamBuilder<W: Write, F: StreamFormat, T: TimestampTrait> {
     pub(crate) id: StreamID,
     pub(crate) info: StreamInfo,

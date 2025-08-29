@@ -9,6 +9,7 @@ use super::{error::XDFWriterError, WriteHelper, XDFWriter};
 /// Top level writer struct. Created using its [`new`](XDFBuilder::new) method.
 ///
 /// Metadata can be added to the file header's XML using the functions provided by the [`HasMetadataAndDesc`] trait.
+#[derive(Debug)]
 pub struct XDFBuilder {
     file_header: Element,
 
