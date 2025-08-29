@@ -85,7 +85,7 @@ impl XDFBuilder {
 /// Provides functions to modify XML to be embedded.
 ///
 /// See [SCCN's metadata conventions](https://github.com/sccn/xdf/wiki/Meta-Data).
-#[allow(private_bounds)]
+#[expect(private_bounds)]
 pub trait HasMetadataAndDesc: Sized + Sealed {
     /// Adds a key-value pair to the top level XML metadata.
     ///

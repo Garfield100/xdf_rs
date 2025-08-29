@@ -79,7 +79,7 @@ impl MyFromBytes for String {
 /// Trait implemented for valid stream formats.
 ///
 /// Mostly a marker trait. Sealed as it is not meant to be implemented for other types.
-#[allow(private_bounds)]
+#[expect(private_bounds)]
 pub trait StreamFormat: Sized + Debug + Sealed + Clone + PartialEq + MyFromBytes {
     /// Returns the [`Format`] associated with this type
     fn format() -> Format;
@@ -96,7 +96,7 @@ define_stream_type!(String, Format::String);
 /// Marker trait for stream formats which are not string.
 ///
 /// Sealed as it is not meant to be implemented for other types.
-#[allow(private_bounds)]
+#[expect(private_bounds)]
 pub trait NumberFormat: StreamFormat + IntoBytes + FromBytes + Immutable + Sealed {}
 impl NumberFormat for i8 {}
 impl NumberFormat for i16 {}

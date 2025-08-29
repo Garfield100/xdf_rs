@@ -7,7 +7,7 @@ pub struct HasTimestamps;
 #[derive(Debug, Clone, Copy)]
 pub struct NoTimestamps;
 
-#[allow(private_bounds)] // the point is to make this trait visible but not implementable
+#[expect(private_bounds)] // the point is to make this trait visible but not implementable
 pub trait TimestampTrait: Sealed {}
 
 impl Sealed for HasTimestamps {}

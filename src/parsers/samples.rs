@@ -54,7 +54,7 @@ fn sample(input: &'_ [u8], num_channels: usize, format: Format) -> IResult<&'_ [
     ))
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(clippy::needless_pass_by_value)]
 #[instrument(level = "trace")]
 pub(super) fn samples(
     input: &'_ [u8],

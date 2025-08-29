@@ -92,7 +92,7 @@ pub struct StreamInfo {
 
 impl StreamInfo {
     /// Creates a new [`StreamInfo`] struct.
-    #[allow(clippy::must_use_candidate)] // false positive
+    #[expect(clippy::must_use_candidate)] // false positive
     pub const fn new(channel_count: usize, nominal_srate: Option<NonZeroPositiveF64>) -> Self {
         Self {
             channel_count,

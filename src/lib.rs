@@ -6,8 +6,10 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::all)]
 #![warn(clippy::missing_const_for_fn)]
+#![warn(clippy::allow_attributes)]
+ //TODO re-enable pedantic lints
 // #![deny(clippy::pedantic)]
-#![allow(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
+#![expect(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
 #![crate_type = "lib"]
 #![crate_name = "xdf"]
 
@@ -674,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     fn test_no_offsets() {
         let offsets = vec![];
         let mut offset_index = 0;

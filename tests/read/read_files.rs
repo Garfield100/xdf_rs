@@ -4,7 +4,7 @@ use xdf::{streams::SampleEnum, XDFFile};
 
 const EPSILON: f64 = 1E-15;
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 #[test]
 fn read_minimal_xdf() {
     let file_path = "tests/read/minimal.xdf";
