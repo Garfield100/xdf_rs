@@ -406,7 +406,7 @@ fn process_samples<T: StreamFormat>(
         .flatten()
         .enumerate()
         .flat_map(|(i, s)| -> Result<Sample<T>, XDFError> {
-            let values: Vec<T> = parse_values::<T>(s.values_bytes)?;
+            let values: Vec<T> = T::from_bytes(s.values_bytes)?;
 
             if let Some(srate) = nominal_srate {
                 let timestamp = if let Some(timestamp) = s.timestamp {
@@ -464,20 +464,6 @@ fn process_samples<T: StreamFormat>(
     };
 
     Ok((samples, measured_srate))
-}
-
-fn parse_values<T: StreamFormat>(values_bytes: &[u8]) -> Result<Vec<T>, ParseError> {
-    let values: &[T] = match T::format() {
-        Format::Int8 => todo!(),
-        Format::Int16 => todo!(),
-        Format::Int32 => todo!(),
-        Format::Int64 => todo!(),
-        Format::Float32 => todo!(),
-        Format::Float64 => todo!(),
-        Format::String => todo!(),
-    };
-
-    todo!()
 }
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.

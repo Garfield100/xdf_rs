@@ -11,12 +11,14 @@ use super::chunk_length::length;
 // [1] [As encoded] [Length]
 
 fn string_value_size(input: &[u8]) -> IResult<&[u8], u64> {
+    let num_length_bytes = input[0] + 1;
     let (input, length) = length(input)?;
+
     trace!("String value is {length} bytes long");
 
     let (input, _string_bytes) = take(length)(input)?;
 
-    Ok((input, length))
+    Ok((input, length + num_length_bytes as u64))
 }
 
 // structure of a value:
@@ -59,10 +61,12 @@ pub(super) fn values_bytes(input: &[u8], format: Format, num_values: usize) -> I
         }
         Format::String => {
             // do not "consume" the input when checking for the total length
-            let (_, string_bytes_len) = context(
+            let (consumed, string_bytes_len) = context(
                 "values String len",
                 multi::fold_many_m_n(num_values, num_values, string_value_size, || 0_u64, u64::wrapping_add),
             )(input)?;
+
+            // let num_consumed = input.len() - consumed.len();
 
             let values_bytes;
             (input, values_bytes) = context("values String", take(string_bytes_len))(input)?;

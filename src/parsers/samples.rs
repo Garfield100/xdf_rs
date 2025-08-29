@@ -77,13 +77,20 @@ pub(super) fn samples(
 
     #[cfg(test)]
     if !_chunk_content.is_empty() {
+        // if the stream format is string, format it as string for easier debugging, otherwise just the usual bytes.
+        let format_as_string_or_bytes = |bytes: &[u8]| match stream_info.channel_format {
+            Format::String => String::from_utf8_lossy(samples[0].values_bytes).into(),
+            _ => format!("{:?}", bytes),
+        };
+
         panic!(
-            "Samples chunk was not read completely, there are {} bytes left. {} samples were successfully parsed from it.\nParsed samples:{:?}\nLeftover bytes: {:?}",
+            "Samples chunk was not read completely, there are {} bytes left. {} samples were successfully parsed from it.\nParsed samples: {:#?}\nLeftover bytes: {:?}\nStream info: {:#?}",
             chunk_content.len(),
             samples.len(),
-            samples,
-            chunk_content
-        )
+            samples.iter().map(|s| format_as_string_or_bytes(s.values_bytes)).collect::<Vec<_>>(),
+            format_as_string_or_bytes(chunk_content),
+            stream_info
+        );
     }
 
     Ok((input, SamplesChunk { stream_id, samples }))

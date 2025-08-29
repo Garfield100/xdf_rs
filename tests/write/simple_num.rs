@@ -37,9 +37,15 @@ simple_num_tests!(f32);
 simple_num_tests!(f64);
 
 fn values_as_u64<T: NumberFormat>(values: &[T]) -> Vec<u64> {
+    let pad_to_8 = |slice: &[u8]| -> [u8; 8] {
+        let mut buf = [0_u8; 8];
+        buf[0..slice.len()].copy_from_slice(slice);
+        buf
+    };
+
     values
         .iter()
-        .map(|n| u64::from_le_bytes(n.as_bytes().try_into().unwrap()))
+        .map(|n| u64::from_le_bytes(pad_to_8(n.as_bytes())))
         .collect()
 }
 
