@@ -45,12 +45,13 @@ mod sample;
 pub use sample::Sample;
 
 mod streams;
+pub use streams::Stream;
+
 mod util;
 
 use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFooterChunk, StreamHeaderChunk};
 use errors::{ParseError, StreamError, XDFError};
 use log::warn;
-use streams::Stream;
 use util::FiniteF64;
 
 use crate::chunk_structs::Chunk;
