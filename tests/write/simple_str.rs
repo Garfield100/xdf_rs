@@ -1,6 +1,5 @@
 use std::{fs, vec};
 use test_log::test;
-use tracing::debug;
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
 use xdf::{
@@ -38,7 +37,7 @@ fn write_simple_str_two_ch() {
     fs::write("str_test.xdf", &buffer).expect("Could not write file");
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    debug!(?parsed);
+    println!("Parsed: {:?}", parsed);
 
     assert_eq!(parsed.version, 1.0);
 
@@ -93,13 +92,11 @@ fn write_simple_str_one_ch() {
 
     drop(stream);
 
-    println!("buffer: {:?}", String::from_utf8_lossy(&buffer));
+    println!("stringified buffer: {:?}", String::from_utf8_lossy(&buffer));
     println!("buffer: {:?}", &buffer);
 
-    // fs::write("str_test.xdf", &buffer).expect("Could not write file");
-
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    debug!(?parsed);
+    dbg!(&parsed);
 
     assert_eq!(parsed.version, 1.0);
 

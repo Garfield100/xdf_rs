@@ -2,7 +2,6 @@ use core::f64;
 use paste::paste;
 use std::vec;
 use test_log::test;
-use tracing::debug;
 use zerocopy::{Immutable, IntoBytes};
 
 use strict_num::{NonZeroPositiveF64, PositiveF64};
@@ -83,7 +82,8 @@ fn write_simple_num_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i8> 
     drop(stream);
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    debug!(?parsed);
+
+    dbg!(&parsed);
 
     assert_eq!(parsed.version, 1.0);
 
@@ -204,7 +204,8 @@ fn write_simple_num_no_ts<T: Clone + Copy + StreamFormat + NumberFormat + From<i
     drop(stream);
 
     let parsed = XDFFile::from_bytes(&buffer).unwrap();
-    debug!(?parsed);
+
+    dbg!(&parsed);
 
     assert_eq!(parsed.version, 1.0);
 

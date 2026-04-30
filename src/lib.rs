@@ -7,8 +7,9 @@
 #![warn(rustdoc::all)]
 #![warn(clippy::missing_const_for_fn)]
 #![warn(clippy::allow_attributes)]
- //TODO re-enable pedantic lints
+//TODO re-enable pedantic lints
 // #![deny(clippy::pedantic)]
+// TODO move this only to where it is used
 #![expect(clippy::cast_precision_loss)] // this is only relevant if you have 2^52 or more samples in a single chunk. 2^52 bytes would be over 4 petabytes.
 #![crate_type = "lib"]
 #![crate_name = "xdf"]
@@ -64,6 +65,8 @@ use chunk_structs::{BoundaryChunk, ClockOffsetChunk, FileHeaderChunk, StreamFoot
 use errors::{ParseError, StreamError, XDFError};
 use streams::Stream;
 use strict_num::FiniteF64;
+
+#[cfg(feature = "tracing")]
 use tracing::{instrument, warn};
 
 use crate::chunk_structs::Chunk;
@@ -122,8 +125,7 @@ impl XDFFile {
     # }
     ```
     */
-    // TODO make tracing an optional feature to further reduce dependencies
-    #[instrument(level = "trace", skip(bytes))]
+    #[cfg_attr(feature = "tracing", instrument(level = "debug"))]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, XDFError> {
         // this error mapping could use some simplification
         let (input, chunks) = xdf_file_parser(bytes)
@@ -143,6 +145,7 @@ impl XDFFile {
 
         // we don't error here to be more error tolerant and allow for partial parsing
         if !input.is_empty() {
+            #[cfg(feature = "tracing")]
             warn!("There are {} bytes left in the input after parsing.", input.len());
 
             #[cfg(test)]
@@ -162,7 +165,7 @@ impl XDFFile {
 }
 
 // takes a vector of chunks and sorts them into a GroupedChunks struct based on their type
-#[instrument(level = "trace")]
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), XDFError> {
     let mut file_header_chunk: Option<FileHeaderChunk> = None;
     let mut stream_header_chunks: Vec<StreamHeaderChunk> = Vec::new();
@@ -218,7 +221,7 @@ fn group_chunks(chunks: Vec<Chunk>) -> Result<(FileHeaderChunk, GroupedChunks), 
 }
 
 /// takes grouped chunks and combines them into finished streams.
-// #[instrument(level = "trace")]
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDFError> {
     let stream_header_map: HashMap<StreamID, StreamHeaderChunk> = grouped_chunks
         .stream_header_chunks
@@ -236,6 +239,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     // We allow this to be more error tolerant and not lose all experimental data.
     for &stream_id in stream_header_map.keys() {
         if !stream_footer_map.contains_key(&stream_id) {
+            #[cfg(feature = "tracing")]
             warn!("Stream header without corresponding stream footer for id: {stream_id}");
 
             #[cfg(test)]
@@ -246,6 +250,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     // this on the other hand is a bit weirder but again, we allow it to be more error tolerant
     for &stream_id in stream_footer_map.keys() {
         if !stream_header_map.contains_key(&stream_id) {
+            #[cfg(feature = "tracing")]
             warn!("Stream footer without corresponding stream header for id: {stream_id}");
 
             #[cfg(test)]
@@ -280,6 +285,7 @@ fn process_streams(mut grouped_chunks: GroupedChunks) -> Result<Vec<Stream>, XDF
     Ok(streams_vec)
 }
 
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn process_single_stream(
     sample_iterators: Vec<SampleIter>,
     stream_id: u32,
@@ -343,7 +349,7 @@ fn process_single_stream(
 
 /// takes a bunch of iterators over a stream's samples and some offsets and
 /// combines them into a vector of samples with timestamps corrected by interpolated clock offsets.
-#[instrument(level = "trace")]
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn process_samples<T: StreamFormat>(
     mut sample_iterators: Vec<SampleIter>,
     stream_offsets: &[ClockOffsetChunk],
@@ -455,6 +461,7 @@ fn process_samples<T: StreamFormat>(
                 let ratio = measured_srate / nominal_srate;
 
                 if (ratio - 1.0).abs() > 0.1 {
+                    #[cfg(feature = "tracing")]
                     warn!("Measured srate deviates more than 10% from the nominal srate: expected nominal of {nominal_srate} Hz but measured {measured_srate} Hz.")
                 }
 
@@ -472,6 +479,7 @@ fn process_samples<T: StreamFormat>(
 
 /// takes a timestamp and a vector of clock offsets and interpolates the offsets to find an offset for the timestamp.
 /// the `offset_index` is used to keep track where to start looking for the right clock offsets.
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn interpolate_and_add_offsets(ts: f64, stream_offsets: &[ClockOffsetChunk], offset_index: &mut usize) -> f64 {
     if stream_offsets.is_empty() {
         ts //there are no offsets;

@@ -15,6 +15,7 @@ use std::{
 };
 
 use strict_num::PositiveF64;
+#[cfg(feature = "tracing")]
 use tracing::trace;
 use xmltree::Element;
 use zerocopy::IntoBytes;
@@ -31,7 +32,6 @@ use super::{
     xdf_builder::xml_add_child_unchecked,
     SharedState, StreamID, StreamInfo,
 };
-
 
 #[derive(Debug)]
 pub struct StreamWriter<W: Write, F: StreamFormat, T: TimestampTrait> {
@@ -305,6 +305,7 @@ where
                 }
 
                 for &value in sample {
+                    #[cfg(feature = "tracing")]
                     trace!("String Value: {value}");
 
                     let value_bytes_len = value.len(); //str::len returns byte length
@@ -314,6 +315,7 @@ where
                     sample_content_byte_size += value_bytes_len + value_length_bytes_len;
                 }
 
+                #[cfg(feature = "tracing")]
                 trace!("Writing string sample of length {sample_content_byte_size}.");
 
                 sample_lengths_sum += sample_content_byte_size;

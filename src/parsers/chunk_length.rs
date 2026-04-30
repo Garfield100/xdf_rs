@@ -4,10 +4,11 @@ use nom::{
     number::complete::{le_u32, le_u64, le_u8},
     IResult, Parser,
 };
+#[cfg(feature = "tracing")]
 use tracing::{instrument, trace};
 
 // num length bytes parser
-#[instrument(level = "trace", skip(input))]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
     let parse_1 = value(1, tag([1_u8]));
     let parse_4 = value(4, tag([4_u8]));
@@ -17,10 +18,11 @@ fn num_length_bytes(input: &[u8]) -> IResult<&[u8], u8> {
 }
 
 // length parser
-#[instrument(level = "trace", ret)]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 pub(crate) fn length(input: &[u8]) -> IResult<&[u8], u64> {
     let (input, num_length_bytes) = num_length_bytes(input)?;
 
+    #[cfg(feature = "tracing")]
     trace!(%num_length_bytes);
 
     match num_length_bytes {

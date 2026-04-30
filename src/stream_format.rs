@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use nom::{combinator, error::context, Finish, IResult};
+#[cfg(feature = "tracing")]
 use tracing::trace;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -50,8 +51,11 @@ impl_my_from_bytes!(i64);
 impl_my_from_bytes!(f32);
 impl_my_from_bytes!(f64);
 
+
 fn string_value(input: &[u8]) -> IResult<&[u8], String> {
     let (input, length) = length(input)?;
+
+    #[cfg(feature = "tracing")]
     trace!("String value is {length} bytes long");
 
     let (input, string_bytes) = nom::bytes::complete::take(length)(input)?;

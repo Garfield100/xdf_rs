@@ -4,13 +4,14 @@
 // [4] [8] [8]
 
 use nom::{error::context, number::complete::le_f64, IResult};
+#[cfg(feature = "tracing")]
 use tracing::instrument;
 
 use crate::ClockOffsetChunk;
 
 use super::{chunk_content, chunk_tags::clock_offset_tag, stream_id};
 
-#[instrument(level = "trace", skip(input))]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 pub(super) fn clock_offset(input: &[u8]) -> IResult<&[u8], ClockOffsetChunk> {
     let (input, chunk_content) = context("clock_offset chunk_content", chunk_content)(input)?;
 

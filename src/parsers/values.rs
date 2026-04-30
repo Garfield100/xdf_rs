@@ -1,4 +1,5 @@
 use nom::{bytes::complete::take, error::context, multi, IResult};
+#[cfg(feature = "tracing")]
 use tracing::{instrument, trace};
 
 use crate::Format;
@@ -9,11 +10,12 @@ use super::chunk_length::length;
 // [NumLengthBytes] [Length] [StringContent]
 // [1, 4, or 8] [...] [Arbitrary]
 // [1] [As encoded] [Length]
-
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 fn string_value_size(input: &[u8]) -> IResult<&[u8], u64> {
     let num_length_bytes = input[0] + 1;
     let (input, length) = length(input)?;
 
+    #[cfg(feature = "tracing")]
     trace!("String value is {length} bytes long");
 
     let (input, _string_bytes) = take(length)(input)?;
@@ -25,7 +27,7 @@ fn string_value_size(input: &[u8]) -> IResult<&[u8], u64> {
 // [double, float, int64, int32, int16 or int8]
 // [Arbitrary]
 // [8, 4, 2 or 1]
-#[instrument(level = "trace", skip(input), ret)]
+#[cfg_attr(feature = "tracing", instrument(level = "trace"))]
 pub(super) fn values_bytes(input: &[u8], format: Format, num_values: usize) -> IResult<&[u8], &[u8]> {
     let mut input = input;
     let values = match format {

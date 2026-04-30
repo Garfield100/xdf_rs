@@ -13,11 +13,12 @@ keywords = [
 ] # this file format is commonly output by electroencephalogram recorders
 categories = ["parser-implementations", "science::neuroscience"]
 
+
 [dependencies]
 nom = { version = "7.1.3", optional = true }
 strict-num = { version = "0.2.0", default-features = false }
 thiserror = "2.0.12"
-tracing = "0.1.41"
+tracing = { version = "0.1.41", optional = true }
 xmltree = "0.11.0"
 zerocopy = { version = "0.8.25", optional = true }
 
@@ -26,6 +27,13 @@ criterion = "0.6.0"
 # used here to create differently-named tests from a generic function without having to use a whole proc-macro.
 paste = "1.0.15"
 test-log = { version = "0.2.17", features = ["trace"] }
+
+[features]
+default = ["read", "write"]
+read = ["dep:nom"]
+write = ["dep:zerocopy"]
+tracing = ["dep:tracing"]
+
 
 [profile.profiler]
 inherits = "release"
@@ -39,8 +47,3 @@ bench = false
 [[bench]]
 name = "parse_files"
 harness = false
-
-[features]
-default = ["read", "write"]
-read = ["dep:nom"]
-write = ["dep:zerocopy"]

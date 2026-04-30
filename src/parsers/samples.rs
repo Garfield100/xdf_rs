@@ -7,6 +7,7 @@ use nom::{
     number::complete::{le_f64, u8},
     IResult,
 };
+#[cfg(feature = "tracing")]
 use tracing::{instrument, trace};
 
 use crate::{
@@ -18,9 +19,11 @@ use crate::{
 
 use super::{chunk_content, chunk_length::length, chunk_tags::samples_tag, stream_id};
 
-#[instrument(level = "trace", skip(input), ret)]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
     let (input, timestamp_bytes) = u8(input)?;
+
+    #[cfg(feature = "tracing")]
     trace!(%timestamp_bytes);
 
     match timestamp_bytes {
@@ -40,7 +43,7 @@ fn optional_timestamp(input: &[u8]) -> IResult<&[u8], Option<f64>> {
 // [TimeStampBytes] [OptionalTimeStamp] [Value 1] [Value 2] ... [Value N]
 // [0 or 8] [Double, in seconds] [Value as defined by format] ...
 // [1][8 if TimeStampBytes==8, 0 if TimeStampBytes==0] [[Variable]] ...
-#[instrument(level = "trace", skip(input))]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 fn sample(input: &'_ [u8], num_channels: usize, format: Format) -> IResult<&'_ [u8], SampleBytes<'_>> {
     let (input, timestamp) = context("sample optional_timestamp", optional_timestamp)(input)?;
     let (input, values_bytes) = context("sample values", |i| values_bytes(i, format, num_channels))(input)?;
@@ -54,8 +57,9 @@ fn sample(input: &'_ [u8], num_channels: usize, format: Format) -> IResult<&'_ [
     ))
 }
 
+// TDODO: explain why this is expected
 #[expect(clippy::needless_pass_by_value)]
-#[instrument(level = "trace")]
+#[cfg_attr(feature = "tracing", instrument(level = "trace", ret))]
 pub(super) fn samples(
     input: &'_ [u8],
     stream_info: Rc<RefCell<HashMap<u32, StreamHeaderChunkInfo>>>,
