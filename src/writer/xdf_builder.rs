@@ -2,7 +2,7 @@ use std::io::Write;
 
 use xmltree::{Element, XMLNode};
 
-use crate::writer::Sealed;
+use crate::Sealed;
 
 use super::{error::XDFWriterError, WriteHelper, XDFWriter};
 

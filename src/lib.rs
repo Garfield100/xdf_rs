@@ -105,6 +105,8 @@ struct GroupedChunks<'a> {
     sample_map: HashMap<StreamID, Vec<SampleIter<'a>>>,
 }
 
+pub(crate) trait Sealed {}
+
 impl XDFFile {
     /**
     Parse an XDF file from a byte slice.

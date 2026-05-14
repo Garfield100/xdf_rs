@@ -1,13 +1,3 @@
-// let stream = StreamWriter {b
-//             state: self.state.clone(),
-//             info: stream_info,
-//             id: stream_id,
-//             _timestamp_marker: PhantomData::<T>,
-//             _format_marker: PhantomData::<F>,
-//         };
-
-//         let writer = &mut self.state.lock()?.writer;
-
 use std::{
     io::Write,
     mem::size_of,

@@ -4,6 +4,7 @@ mod read {
     mod read_integration;
 }
 
+#[cfg(feature = "write")]
 mod write {
     mod simple_num;
     mod simple_str;

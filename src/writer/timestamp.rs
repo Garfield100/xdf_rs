@@ -1,4 +1,4 @@
-use crate::writer::Sealed;
+use crate::Sealed;
 
 /// Marker type used to specify that a stream should have timestamps using the generic parameters.
 #[derive(Debug, Clone, Copy)]

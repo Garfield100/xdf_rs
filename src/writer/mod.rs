@@ -25,8 +25,6 @@ pub use xdf_builder::{HasMetadataAndDesc, XDFBuilder};
 
 use crate::{writer::write_helper::WriteHelper, StreamID};
 
-pub(crate) trait Sealed {}
-
 const _: () = const {
     assert!(size_of::<StreamID>() == 4, "StreamID should be 4 bytes long");
 };

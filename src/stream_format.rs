@@ -5,7 +5,7 @@ use nom::{combinator, error::context, Finish, IResult};
 use tracing::trace;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
-use crate::{errors::ParseError, parsers::chunk_length::length, writer::Sealed, Format};
+use crate::{errors::ParseError, parsers::chunk_length::length, Sealed, Format};
 
 macro_rules! define_stream_type {
     ($name:ty, $format:expr) => {

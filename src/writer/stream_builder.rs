@@ -1,6 +1,8 @@
 use xmltree::{Element, XMLNode};
 
-use crate::writer::{Sealed, SharedState};
+use crate::writer::SharedState;
+use crate::Sealed;
+
 use std::{
     io::Write,
     sync::{Arc, Mutex},
@@ -17,7 +19,7 @@ use super::{
     StreamID,
 };
 
-///
+/// TODO Streambuilder docs
 ///
 /// Overwritten top-level XML elements: `channel_count`, `nominal_srate`, `channel_format`.
 #[derive(Debug)]
